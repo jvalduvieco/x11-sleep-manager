@@ -75,6 +75,7 @@ jobs:
           Description: X11/i3 daemon bridging logind inhibitors to X11 lock behavior
           EOF
           dpkg-deb --build deb x11-sleep-manager_0.1.0_amd64.deb
+        shell: bash
 
       - name: Build Arch package
         if: matrix.type == 'arch'
@@ -82,7 +83,7 @@ jobs:
           mkdir -p pkg/x11-sleep-manager/usr/bin
           cp x11-sleep-manager pkg/x11-sleep-manager/usr/bin/
           cp x11smctl pkg/x11-sleep-manager/usr/bin/
-          cat > pkg/x11-sleep-manager/PKGBUILD <<'PKGBUILD'
+          cat > pkg/x11-sleep-manager/PKGBUILD <<'EOF'
           pkgname=x11-sleep-manager
           pkgver=0.1.0
           pkgrel=1
@@ -95,15 +96,14 @@ jobs:
             install -Dm755 x11-sleep-manager "$pkgdir/usr/bin/x11-sleep-manager"
             install -Dm755 x11smctl "$pkgdir/usr/bin/x11smctl"
           }
-          PKGBUILD
+          EOF
           tar -czvf x11-sleep-manager-0.1.0-1-x86_64.tar.gz -C pkg .
+        shell: bash
 
       - name: Build Nix package
         if: matrix.type == 'nix'
         run: |
-          cat > default.nix <<'NIX'
-          { pkgs ? import <nixpkgs> {} }:
-
+          cat > default.nix { pkgs ? import <nixpkgs> {} }:
           pkgs.buildGoPackage {
             pname = "x11-sleep-manager";
             version = "0.1.0";
@@ -111,7 +111,7 @@ jobs:
             goDeps = ./go.mod;
             binaries = [ "x11-sleep-manager" "x11smctl" ];
           }
-          NIX
+        shell: bash
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
