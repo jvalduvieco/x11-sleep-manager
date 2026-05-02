@@ -160,6 +160,7 @@ func (a *App) Reconcile(ctx context.Context) error {
 func (a *App) Enable(ctx context.Context) error {
 	a.mu.Lock()
 	a.enabled = true
+	a.store.RecordEvent("runtime.enabled", "")
 	a.mu.Unlock()
 	return a.Reconcile(ctx)
 }
@@ -169,6 +170,7 @@ func (a *App) Disable(ctx context.Context) error {
 	defer a.mu.Unlock()
 
 	a.enabled = false
+	a.store.RecordEvent("runtime.disabled", "")
 	if err := a.clearActiveSideEffects(ctx); err != nil {
 		a.store.SetLastError(err)
 		a.store.Transition(state.ModeDegraded)

@@ -23,6 +23,10 @@ type ConfigSource interface {
 	Config() config.Config
 }
 
+type EventSource interface {
+	Events() []state.Event
+}
+
 type SessionRegistrar interface {
 	RegisterSession(session state.Session)
 }
@@ -67,6 +71,14 @@ func NewServerWithRuntimeControl(socketPath string, source StatusSource, registr
 		mux.HandleFunc("GET /v1/config", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			if err := json.NewEncoder(w).Encode(configSource.Config()); err != nil {
+				http.Error(w, fmt.Sprintf("encode response: %v", err), http.StatusInternalServerError)
+			}
+		})
+	}
+	if eventSource, ok := source.(EventSource); ok {
+		mux.HandleFunc("GET /v1/events", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			if err := json.NewEncoder(w).Encode(eventSource.Events()); err != nil {
 				http.Error(w, fmt.Sprintf("encode response: %v", err), http.StatusInternalServerError)
 			}
 		})

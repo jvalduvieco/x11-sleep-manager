@@ -39,6 +39,7 @@ Not implemented yet:
 
 - `GET /v1/status`
 - `GET /v1/config`
+- `GET /v1/events`
 - `POST /v1/session`
 - `POST /v1/reconcile`
 - `POST /v1/enable`
@@ -80,6 +81,22 @@ Current status payload also includes:
 - reconcile failure count
 - whether X11 overrides are currently active
 - paused helper names
+
+## Current Event Model
+
+The daemon now keeps a small in-memory event buffer.
+
+Current event sources include:
+
+- state transitions
+- session registration
+- reconcile failures
+- recorded errors
+- runtime enable/disable commands
+
+Current transport:
+
+- `GET /v1/events`
 
 ## Current Inhibitor Model
 

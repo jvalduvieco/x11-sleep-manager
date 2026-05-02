@@ -8,6 +8,8 @@ import (
 	"github.com/jvalduvieco/x11_sleep_manager/internal/observe"
 )
 
+const maxEvents = 100
+
 type Mode string
 
 const (
@@ -35,6 +37,12 @@ type Snapshot struct {
 	LastError              string              `json:"last_error,omitempty"`
 }
 
+type Event struct {
+	Time    time.Time `json:"time"`
+	Name    string    `json:"name"`
+	Message string    `json:"message,omitempty"`
+}
+
 type Session struct {
 	Display            string    `json:"display"`
 	XAuthority         string    `json:"xauthority"`
@@ -58,6 +66,7 @@ type Store struct {
 	reconcileFailures  int
 	x11OverridesActive bool
 	pausedHelpers      []string
+	events             []Event
 	clockNow           func() time.Time
 }
 
@@ -102,6 +111,12 @@ func (s *Store) Config() config.Config {
 	return s.config
 }
 
+func (s *Store) Events() []Event {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return cloneEvents(s.events)
+}
+
 func (s *Store) Transition(next Mode) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -112,6 +127,7 @@ func (s *Store) Transition(next Mode) {
 
 	s.state = next
 	s.changed = s.clockNow()
+	s.appendEventLocked("state.transition", string(next))
 }
 
 func (s *Store) SetLastError(err error) {
@@ -124,6 +140,7 @@ func (s *Store) SetLastError(err error) {
 	}
 
 	s.lastErr = err.Error()
+	s.appendEventLocked("error", err.Error())
 }
 
 func (s *Store) RegisterSession(session Session) {
@@ -131,6 +148,7 @@ func (s *Store) RegisterSession(session Session) {
 	defer s.mu.Unlock()
 	session.RegisteredAt = s.clockNow()
 	s.session = &session
+	s.appendEventLocked("session.registered", session.Display)
 }
 
 func (s *Store) RecordReconcileSuccess(matching []observe.Inhibitor) {
@@ -154,6 +172,7 @@ func (s *Store) RecordReconcileFailure(err error) {
 	s.reconcileFailures++
 	if err != nil {
 		s.lastErr = err.Error()
+		s.appendEventLocked("reconcile.failed", err.Error())
 	}
 }
 
@@ -202,4 +221,26 @@ func cloneStrings(values []string) []string {
 	cloned := make([]string, len(values))
 	copy(cloned, values)
 	return cloned
+}
+
+func cloneEvents(events []Event) []Event {
+	if len(events) == 0 {
+		return nil
+	}
+	cloned := make([]Event, len(events))
+	copy(cloned, events)
+	return cloned
+}
+
+func (s *Store) RecordEvent(name, message string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.appendEventLocked(name, message)
+}
+
+func (s *Store) appendEventLocked(name, message string) {
+	s.events = append(s.events, Event{Time: s.clockNow(), Name: name, Message: message})
+	if len(s.events) > maxEvents {
+		s.events = append([]Event(nil), s.events[len(s.events)-maxEvents:]...)
+	}
 }

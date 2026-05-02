@@ -131,3 +131,14 @@ func TestSetPausedHelpersIsReflectedInSnapshot(t *testing.T) {
 		t.Fatalf("unexpected paused helpers: %#v", got)
 	}
 }
+
+func TestEventsAreRecordedAndTrimmed(t *testing.T) {
+	store := NewStore(config.Default(), "dev")
+	for i := 0; i < maxEvents+5; i++ {
+		store.RecordEvent("test", "event")
+	}
+	events := store.Events()
+	if got, want := len(events), maxEvents; got != want {
+		t.Fatalf("unexpected event count: got %d want %d", got, want)
+	}
+}
