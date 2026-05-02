@@ -78,19 +78,6 @@ jobs:
           EOF
           tar -czvf x11-sleep-manager-${{ steps.version.outputs.version }}-1-x86_64.tar.gz -C pkg .
 
-      - name: Build Nix package
-        run: |
-          cat > default.nix <<'EOF'
-          { pkgs ? import <nixpkgs> {} }:
-
-          pkgs.buildGoModule {
-            pname = "x11-sleep-manager";
-            version = "${{ steps.version.outputs.version }}";
-            src = ./.;
-            vendorHash = "";
-          }
-          EOF
-
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -100,6 +87,5 @@ jobs:
           files: |
             *.deb
             *.tar.gz
-            default.nix
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
