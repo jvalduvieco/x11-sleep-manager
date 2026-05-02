@@ -22,6 +22,9 @@ func TestDefaultUsesRuntimeDirWhenSet(t *testing.T) {
 	if !cfg.X11.DisableScreenSaver || !cfg.X11.DisableDPMS || !cfg.X11.RestorePreviousState {
 		t.Fatal("expected X11 defaults to be enabled")
 	}
+	if got, want := strings.Join(cfg.Processes.Pause, ","), "xss-lock"; got != want {
+		t.Fatalf("unexpected pause processes: got %q want %q", got, want)
+	}
 }
 
 func TestLoadEmptyPathReturnsDefaults(t *testing.T) {

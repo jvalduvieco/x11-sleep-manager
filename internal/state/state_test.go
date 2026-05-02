@@ -123,3 +123,11 @@ func TestSetX11OverridesActiveIsReflectedInSnapshot(t *testing.T) {
 		t.Fatal("expected x11 overrides to be active")
 	}
 }
+
+func TestSetPausedHelpersIsReflectedInSnapshot(t *testing.T) {
+	store := NewStore(config.Default(), "dev")
+	store.SetPausedHelpers([]string{"xss-lock"})
+	if got := store.Snapshot().PausedHelpers; len(got) != 1 || got[0] != "xss-lock" {
+		t.Fatalf("unexpected paused helpers: %#v", got)
+	}
+}

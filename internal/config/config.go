@@ -15,6 +15,7 @@ type Config struct {
 	Socket    SocketConfig    `json:"socket"`
 	Match     MatchConfig     `json:"match"`
 	X11       X11Config       `json:"x11"`
+	Processes ProcessesConfig `json:"processes"`
 	Reconcile ReconcileConfig `json:"reconcile"`
 	Logging   LoggingConfig   `json:"logging"`
 }
@@ -37,6 +38,11 @@ type X11Config struct {
 	DisableScreenSaver   bool `json:"disable_screensaver"`
 	DisableDPMS          bool `json:"disable_dpms"`
 	RestorePreviousState bool `json:"restore_previous_state"`
+}
+
+type ProcessesConfig struct {
+	Pause  []string `json:"pause"`
+	Resume []string `json:"resume"`
 }
 
 type LoggingConfig struct {
@@ -68,6 +74,10 @@ func Default() Config {
 			DisableScreenSaver:   true,
 			DisableDPMS:          true,
 			RestorePreviousState: true,
+		},
+		Processes: ProcessesConfig{
+			Pause:  []string{"xss-lock"},
+			Resume: []string{"xss-lock"},
 		},
 		Reconcile: ReconcileConfig{
 			Interval: Duration{Duration: 15 * time.Second},

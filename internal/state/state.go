@@ -31,6 +31,7 @@ type Snapshot struct {
 	ReconcileCount         int                 `json:"reconcile_count"`
 	ReconcileFailures      int                 `json:"reconcile_failures"`
 	X11OverridesActive     bool                `json:"x11_overrides_active"`
+	PausedHelpers          []string            `json:"paused_helpers,omitempty"`
 	LastError              string              `json:"last_error,omitempty"`
 }
 
@@ -56,6 +57,7 @@ type Store struct {
 	reconcileCount     int
 	reconcileFailures  int
 	x11OverridesActive bool
+	pausedHelpers      []string
 	clockNow           func() time.Time
 }
 
@@ -89,6 +91,7 @@ func (s *Store) Snapshot() Snapshot {
 		ReconcileCount:         s.reconcileCount,
 		ReconcileFailures:      s.reconcileFailures,
 		X11OverridesActive:     s.x11OverridesActive,
+		PausedHelpers:          cloneStrings(s.pausedHelpers),
 		LastError:              s.lastErr,
 	}
 }
@@ -154,6 +157,12 @@ func (s *Store) SetX11OverridesActive(active bool) {
 	s.x11OverridesActive = active
 }
 
+func (s *Store) SetPausedHelpers(names []string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.pausedHelpers = cloneStrings(names)
+}
+
 func cloneSession(session *Session) *Session {
 	if session == nil {
 		return nil
@@ -178,4 +187,13 @@ func cloneTimePtr(value *time.Time) *time.Time {
 	}
 	copy := *value
 	return &copy
+}
+
+func cloneStrings(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	cloned := make([]string, len(values))
+	copy(cloned, values)
+	return cloned
 }

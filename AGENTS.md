@@ -26,6 +26,7 @@ The repository now contains the first bootstrap slice:
 - periodic reconcile loop over an inhibitor source abstraction
 - real `logind` D-Bus integration in `internal/observe`
 - `xset q` parsing and X11 override control in `internal/x11state`
+- helper process pause/resume control in `internal/processctl`
 - daemon startup and signal handling in `cmd/x11-sleep-manager`
 - CLI `status` and `register-session` commands in `cmd/x11smctl`
 - in-memory X11 session registration captured from the CLI environment
@@ -33,7 +34,6 @@ The repository now contains the first bootstrap slice:
 Not implemented yet:
 
 - `doctor`, `enable`, `disable`, `reconcile`, or config mutation endpoints
-- helper process control such as `xss-lock` pause/resume
 
 ## Current Control API
 
@@ -75,6 +75,7 @@ Current status payload also includes:
 - total reconcile count
 - reconcile failure count
 - whether X11 overrides are currently active
+- paused helper names
 
 ## Current Inhibitor Model
 
@@ -147,6 +148,26 @@ Current config defaults for `x11`:
 Current limitation:
 
 - X11 actions require a registered session; matching inhibitors without one move the daemon to `degraded`
+
+## Current Helper Process Behavior
+
+`internal/processctl` currently manages configured helper processes by process name.
+
+Implemented behavior:
+
+- discover matching process IDs from `/proc/*/comm`
+- pause configured helper names with `SIGSTOP`
+- resume only the processes this daemon previously paused using `SIGCONT`
+- expose currently paused helper names in daemon status
+
+Current config defaults for `processes`:
+
+- `pause: ["xss-lock"]`
+- `resume: ["xss-lock"]`
+
+Current limitation:
+
+- process discovery is name-based and Linux `/proc`-based
 
 ## Config Rules
 

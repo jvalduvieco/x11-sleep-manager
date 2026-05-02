@@ -11,6 +11,7 @@ import (
 	"github.com/jvalduvieco/x11_sleep_manager/internal/control"
 	"github.com/jvalduvieco/x11_sleep_manager/internal/matcher"
 	"github.com/jvalduvieco/x11_sleep_manager/internal/observe"
+	"github.com/jvalduvieco/x11_sleep_manager/internal/processctl"
 	"github.com/jvalduvieco/x11_sleep_manager/internal/state"
 	"github.com/jvalduvieco/x11_sleep_manager/internal/x11state"
 )
@@ -23,6 +24,7 @@ type App struct {
 	selfUID       int
 	stopReconcile context.CancelFunc
 	x11           *x11state.Controller
+	processes     *processctl.Controller
 }
 
 func New(cfg config.Config, version string) *App {
@@ -36,12 +38,13 @@ func New(cfg config.Config, version string) *App {
 func NewWithSource(cfg config.Config, version string, source observe.Source, selfUID int) *App {
 	store := state.NewStore(cfg, version)
 	return &App{
-		server:  control.NewServerWithSessionRegistration(cfg.Socket.Path, store, store),
-		store:   store,
-		config:  cfg,
-		source:  source,
-		selfUID: selfUID,
-		x11:     x11state.NewController(cfg.X11, x11state.CommandRunner{}),
+		server:    control.NewServerWithSessionRegistration(cfg.Socket.Path, store, store),
+		store:     store,
+		config:    cfg,
+		source:    source,
+		selfUID:   selfUID,
+		x11:       x11state.NewController(cfg.X11, x11state.CommandRunner{}),
+		processes: processctl.NewController(cfg.Processes, processctl.ProcInspector{}),
 	}
 }
 
@@ -67,6 +70,11 @@ func (a *App) Shutdown(ctx context.Context) error {
 		restoreErr = a.x11.Restore(ctx, *snapshot.Session)
 		a.store.SetX11OverridesActive(false)
 	}
+	processErr := a.processes.Resume(ctx)
+	if processErr == nil {
+		a.store.SetPausedHelpers(nil)
+	}
+	restoreErr = errors.Join(restoreErr, processErr)
 	return errors.Join(restoreErr, a.server.Shutdown(ctx))
 }
 
@@ -97,10 +105,24 @@ func (a *App) Reconcile(ctx context.Context) error {
 			a.store.Transition(state.ModeDegraded)
 			return fmt.Errorf("apply x11 overrides: %w", err)
 		}
+		if err := a.processes.Pause(ctx); err != nil {
+			a.store.SetLastError(err)
+			a.store.Transition(state.ModeDegraded)
+			return fmt.Errorf("pause helper processes: %w", err)
+		}
 		a.store.SetX11OverridesActive(true)
+		a.store.SetPausedHelpers(a.processes.PausedNames())
 		a.store.Transition(state.ModeInhibited)
 	} else {
 		snapshot := a.store.Snapshot()
+		if a.processes.HasPaused() {
+			if err := a.processes.Resume(ctx); err != nil {
+				a.store.SetLastError(err)
+				a.store.Transition(state.ModeDegraded)
+				return fmt.Errorf("resume helper processes: %w", err)
+			}
+			a.store.SetPausedHelpers(nil)
+		}
 		if a.x11.Applied() {
 			if snapshot.Session == nil {
 				err := errors.New("cannot restore x11 state without registered session")

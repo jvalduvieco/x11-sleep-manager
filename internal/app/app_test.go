@@ -3,11 +3,13 @@ package app
 import (
 	"context"
 	"errors"
+	"syscall"
 	"testing"
 	"time"
 
 	"github.com/jvalduvieco/x11_sleep_manager/internal/config"
 	"github.com/jvalduvieco/x11_sleep_manager/internal/observe"
+	"github.com/jvalduvieco/x11_sleep_manager/internal/processctl"
 	"github.com/jvalduvieco/x11_sleep_manager/internal/state"
 	"github.com/jvalduvieco/x11_sleep_manager/internal/x11state"
 )
@@ -31,6 +33,17 @@ type fakeX11Runner struct {
 	errs    []error
 }
 
+type fakeProcessInspector struct {
+	processes map[string][]int
+	signals   []signalRecord
+	err       error
+}
+
+type signalRecord struct {
+	pid    int
+	signal syscall.Signal
+}
+
 func (f fakeSource) List(context.Context) ([]observe.Inhibitor, error) {
 	if f.err != nil {
 		return nil, f.err
@@ -52,11 +65,28 @@ func (f *fakeX11Runner) Run(_ context.Context, _ state.Session, args ...string) 
 	return output, err
 }
 
+func (f *fakeProcessInspector) FindByName(_ context.Context, name string) ([]int, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return append([]int(nil), f.processes[name]...), nil
+}
+
+func (f *fakeProcessInspector) Signal(_ context.Context, pid int, signal syscall.Signal) error {
+	if f.err != nil {
+		return f.err
+	}
+	f.signals = append(f.signals, signalRecord{pid: pid, signal: signal})
+	return nil
+}
+
 func TestReconcileMovesToInhibitedWhenMatchesExist(t *testing.T) {
 	cfg := config.Default()
 	app := NewWithSource(cfg, "test", fakeSource{inhibitors: []observe.Inhibitor{{What: "sleep:idle", Who: "OpenCode", UID: 1000}}}, 1000)
 	runner := &fakeX11Runner{outputs: []string{sampleXSetOutput}}
+	procInspector := &fakeProcessInspector{processes: map[string][]int{"xss-lock": {200}}}
 	app.x11 = x11state.NewController(cfg.X11, runner)
+	app.processes = processctl.NewController(cfg.Processes, procInspector)
 	app.store.RegisterSession(state.Session{Display: ":0", XAuthority: "/tmp/auth"})
 
 	if err := app.Reconcile(context.Background()); err != nil {
@@ -73,6 +103,9 @@ func TestReconcileMovesToInhibitedWhenMatchesExist(t *testing.T) {
 	if !snapshot.X11OverridesActive {
 		t.Fatal("expected x11 overrides to be active")
 	}
+	if got := snapshot.PausedHelpers; len(got) != 1 || got[0] != "xss-lock" {
+		t.Fatalf("unexpected paused helpers: %#v", got)
+	}
 }
 
 func TestReconcileMovesToIdleWhenNoMatchesExist(t *testing.T) {
@@ -80,12 +113,18 @@ func TestReconcileMovesToIdleWhenNoMatchesExist(t *testing.T) {
 	app := NewWithSource(cfg, "test", fakeSource{inhibitors: []observe.Inhibitor{{What: "shutdown", Who: "OpenCode", UID: 1000}}}, 1000)
 	app.store.Transition(state.ModeInhibited)
 	runner := &fakeX11Runner{outputs: []string{sampleXSetOutput}}
+	procInspector := &fakeProcessInspector{processes: map[string][]int{"xss-lock": {200}}}
 	app.x11 = x11state.NewController(cfg.X11, runner)
+	app.processes = processctl.NewController(cfg.Processes, procInspector)
 	app.store.RegisterSession(state.Session{Display: ":0", XAuthority: "/tmp/auth"})
 	if err := app.x11.Apply(context.Background(), *app.store.Snapshot().Session); err != nil {
 		t.Fatalf("setup apply returned error: %v", err)
 	}
+	if err := app.processes.Pause(context.Background()); err != nil {
+		t.Fatalf("setup pause returned error: %v", err)
+	}
 	app.store.SetX11OverridesActive(true)
+	app.store.SetPausedHelpers(app.processes.PausedNames())
 
 	if err := app.Reconcile(context.Background()); err != nil {
 		t.Fatalf("reconcile returned error: %v", err)
@@ -96,6 +135,9 @@ func TestReconcileMovesToIdleWhenNoMatchesExist(t *testing.T) {
 	}
 	if app.Snapshot().X11OverridesActive {
 		t.Fatal("expected x11 overrides to be inactive")
+	}
+	if len(app.Snapshot().PausedHelpers) != 0 {
+		t.Fatalf("expected paused helpers to be cleared, got %#v", app.Snapshot().PausedHelpers)
 	}
 }
 
@@ -121,6 +163,7 @@ func TestReconcileDegradesWithoutRegisteredSessionWhenMatchExists(t *testing.T) 
 	cfg := config.Default()
 	app := NewWithSource(cfg, "test", fakeSource{inhibitors: []observe.Inhibitor{{What: "idle", Who: "OpenCode", UID: 1000}}}, 1000)
 	app.x11 = x11state.NewController(cfg.X11, &fakeX11Runner{outputs: []string{sampleXSetOutput}})
+	app.processes = processctl.NewController(cfg.Processes, &fakeProcessInspector{})
 
 	err := app.Reconcile(context.Background())
 	if err == nil {
