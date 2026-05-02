@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/jvalduvieco/x11_sleep_manager/internal/config"
+	"github.com/jvalduvieco/x11_sleep_manager/internal/observe"
 )
 
 func TestNewStoreStartsIdle(t *testing.T) {
@@ -70,5 +71,47 @@ func TestSettersAreReflectedInSnapshot(t *testing.T) {
 	store.SetLastError(nil)
 	if got := store.Snapshot().LastError; got != "" {
 		t.Fatalf("expected cleared error, got %q", got)
+	}
+}
+
+func TestRecordReconcileSuccessUpdatesStatus(t *testing.T) {
+	store := NewStore(config.Default(), "dev")
+	reconciledAt := time.Date(2026, 5, 2, 13, 0, 0, 0, time.UTC)
+	store.clockNow = func() time.Time { return reconciledAt }
+
+	matching := []observe.Inhibitor{{What: "idle", Who: "OpenCode", UID: 1000}}
+	store.RecordReconcileSuccess(matching)
+
+	snapshot := store.Snapshot()
+	if snapshot.ReconcileCount != 1 {
+		t.Fatalf("unexpected reconcile count: %d", snapshot.ReconcileCount)
+	}
+	if snapshot.ReconcileFailures != 0 {
+		t.Fatalf("unexpected reconcile failures: %d", snapshot.ReconcileFailures)
+	}
+	if snapshot.LastReconcileAt == nil || !snapshot.LastReconcileAt.Equal(reconciledAt) {
+		t.Fatalf("unexpected last reconcile time: %v", snapshot.LastReconcileAt)
+	}
+	if snapshot.MatchingInhibitorCount != 1 {
+		t.Fatalf("unexpected inhibitor count: %d", snapshot.MatchingInhibitorCount)
+	}
+}
+
+func TestRecordReconcileFailureKeepsFailureStats(t *testing.T) {
+	store := NewStore(config.Default(), "dev")
+	reconciledAt := time.Date(2026, 5, 2, 13, 5, 0, 0, time.UTC)
+	store.clockNow = func() time.Time { return reconciledAt }
+
+	store.RecordReconcileFailure(errors.New("source failed"))
+
+	snapshot := store.Snapshot()
+	if snapshot.ReconcileCount != 1 {
+		t.Fatalf("unexpected reconcile count: %d", snapshot.ReconcileCount)
+	}
+	if snapshot.ReconcileFailures != 1 {
+		t.Fatalf("unexpected reconcile failures: %d", snapshot.ReconcileFailures)
+	}
+	if snapshot.LastError != "source failed" {
+		t.Fatalf("unexpected last error: %q", snapshot.LastError)
 	}
 }

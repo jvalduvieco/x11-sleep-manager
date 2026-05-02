@@ -21,13 +21,16 @@ The repository now contains the first bootstrap slice:
 - explicit daemon state in `internal/state`
 - Unix-socket HTTP control server in `internal/control`
 - bootstrap app wiring in `internal/app`
+- normalized inhibitor model in `internal/observe`
+- config-based inhibitor matching in `internal/matcher`
+- periodic reconcile loop over an inhibitor source abstraction
 - daemon startup and signal handling in `cmd/x11-sleep-manager`
 - CLI `status` and `register-session` commands in `cmd/x11smctl`
 - in-memory X11 session registration captured from the CLI environment
 
 Not implemented yet:
 
-- inhibitor discovery or matching
+- real `logind` D-Bus integration
 - X11 command execution
 - `doctor`, `enable`, `disable`, `reconcile`, or config mutation endpoints
 - helper process control such as `xss-lock` pause/resume
@@ -63,6 +66,39 @@ Optional fields currently accepted:
 - `degraded`
 
 The initial daemon starts in `idle`.
+
+Current status payload also includes:
+
+- matching inhibitor count
+- matching inhibitor details
+- last reconcile timestamp
+- total reconcile count
+- reconcile failure count
+
+## Current Inhibitor Model
+
+`internal/observe` currently defines a normalized inhibitor with:
+
+- `what`
+- `who`
+- `why`
+- `uid`
+
+The default app wiring currently uses a no-op source, so the reconcile loop runs and reports empty inhibitor state until real `logind` integration is added.
+
+## Current Matching Rules
+
+`internal/matcher` currently applies these filters from config:
+
+- `uid == self`
+- exact `who` match against configured values
+- token match for colon-delimited `what` values, such as `sleep:idle`
+
+Default policy still targets:
+
+- current user only
+- `who == OpenCode`
+- `what_any` contains `idle` or `sleep`
 
 ## Current Session Registration Model
 
