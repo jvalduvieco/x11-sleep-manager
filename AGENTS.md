@@ -35,6 +35,8 @@ Not implemented yet:
 
 - broader config mutation coverage beyond the currently supported runtime-safe sections
 
+The repository now also includes packaging and operator examples under `examples/` and a live validation guide in `docs/manual-smoke-test.md`.
+
 ## Current Control API
 
 - `GET /v1/status`

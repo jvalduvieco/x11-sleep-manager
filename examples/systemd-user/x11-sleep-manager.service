@@ -1,0 +1,13 @@
+[Unit]
+Description=X11 Sleep Manager
+After=graphical-session.target
+Wants=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/bin/x11-sleep-manager --config %h/.config/x11-sleep-manager/config.json
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target

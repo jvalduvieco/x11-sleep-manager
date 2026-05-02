@@ -1,6 +1,6 @@
 # x11_sleep_manager
 
-`x11_sleep_manager` is a planned user-session daemon and companion CLI for X11/i3 environments.
+`x11_sleep_manager` is a user-session daemon and companion CLI for X11/i3 environments.
 
 It watches `systemd-logind` inhibitor state and applies X11-compatible session policy when matching inhibitors are active. The primary goal is to bridge `systemd-inhibit` with classic X11 idle and lock tooling such as `xset`, `xss-lock`, and `slock`.
 
@@ -19,6 +19,7 @@ It watches `systemd-logind` inhibitor state and applies X11-compatible session p
 - Implementation plan: `docs/implementation-plan.md`
 - Testing strategy: `docs/testing.md`
 - Current environment notes: `docs/current-environment.md`
+- Manual smoke test: `docs/manual-smoke-test.md`
 
 ## Proposed binaries
 
@@ -27,11 +28,20 @@ It watches `systemd-logind` inhibitor state and applies X11-compatible session p
 
 ## Status
 
-Scaffold and design docs only. Implementation is intentionally deferred.
+The daemon now has a working first implementation slice with:
 
-## Next Session
+- real `logind` inhibitor enumeration
+- X11 session registration
+- `xset`-based screensaver and DPMS suppression or restore
+- helper-process pause and resume for `xss-lock`
+- runtime control commands
+- config inspection and constrained runtime config mutation
+- event inspection and doctor diagnostics
 
-The next implementation session should start with `docs/handover.md`.
+## Examples
+
+- example config: `examples/config.json`
+- example `systemd --user` unit: `examples/systemd-user/x11-sleep-manager.service`
 
 ## Testing Expectation
 

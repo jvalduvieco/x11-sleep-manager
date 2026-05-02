@@ -1,0 +1,26 @@
+{
+  "socket": {
+    "path": "$XDG_RUNTIME_DIR/x11_sleep_manager.sock"
+  },
+  "match": {
+    "uid": "self",
+    "who": ["OpenCode"],
+    "what_any": ["idle", "sleep"]
+  },
+  "x11": {
+    "disable_screensaver": true,
+    "disable_dpms": true,
+    "restore_previous_state": true
+  },
+  "processes": {
+    "pause": ["xss-lock"],
+    "resume": ["xss-lock"]
+  },
+  "reconcile": {
+    "interval": "15s"
+  },
+  "logging": {
+    "level": "info",
+    "format": "json"
+  }
+}
