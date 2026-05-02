@@ -9,17 +9,16 @@ jobs:
   release:
     name: Create Release
     runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Extract version
         id: version
         run: echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
 
       - name: Generate changelog
-        id: changelog
         run: |
           PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
           if [ -n "$PREV_TAG" ]; then
@@ -27,45 +26,7 @@ jobs:
           else
             CHANGES=$(git log --pretty=format:"- %s (%h)" --no-merges -n 50)
           fi
-          echo "changelog<<EOF" >> $GITHUB_OUTPUT
-          echo "$CHANGES" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-
-      - name: Create GitHub Release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.ref_name }}
-          release_name: ${{ github.ref_name }}
-          body: |
-            ## Changes
-
-            ${{ steps.changelog.outputs.changelog }}
-          draft: false
-          prerelease: false
-
-  packages:
-    name: Packages
-    needs: release
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        include:
-          - type: deb
-          - type: arch
-          - type: nix
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Extract version
-        id: version
-        run: echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.22'
+          printf '%s' "$CHANGES" > changelog.txt
 
       - name: Build binaries
         run: |
@@ -73,7 +34,6 @@ jobs:
           go build -o x11smctl ./cmd/x11smctl
 
       - name: Build Debian package
-        if: matrix.type == 'deb'
         run: |
           mkdir -p deb/usr/local/bin
           mkdir -p deb/DEBIAN
@@ -89,10 +49,8 @@ jobs:
           Description: X11/i3 daemon bridging logind inhibitors to X11 lock behavior
           EOF
           dpkg-deb --build deb x11-sleep-manager_${{ steps.version.outputs.version }}_amd64.deb
-        shell: bash
 
       - name: Build Arch package
-        if: matrix.type == 'arch'
         run: |
           mkdir -p pkg/x11-sleep-manager/usr/bin
           cp x11-sleep-manager pkg/x11-sleep-manager/usr/bin/
@@ -112,12 +70,12 @@ jobs:
           }
           EOF
           tar -czvf x11-sleep-manager-${{ steps.version.outputs.version }}-1-x86_64.tar.gz -C pkg .
-        shell: bash
 
       - name: Build Nix package
-        if: matrix.type == 'nix'
         run: |
-          cat > default.nix { pkgs ? import <nixpkgs> {} }:
+          cat > default.nix <<'EOF'
+          { pkgs ? import <nixpkgs> {} }:
+
           pkgs.buildGoPackage {
             pname = "x11-sleep-manager";
             version = "${{ steps.version.outputs.version }}";
@@ -125,12 +83,14 @@ jobs:
             goDeps = ./go.mod;
             binaries = [ "x11-sleep-manager" "x11smctl" ];
           }
-        shell: bash
+          EOF
 
       - name: Upload to GitHub Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
+          tag_name: ${{ steps.version.outputs.version }}
+          name: ${{ steps.version.outputs.version }}
+          body_path: changelog.txt
           files: |
             *.deb
             *.tar.gz
