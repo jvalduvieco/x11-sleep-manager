@@ -1,0 +1,92 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  packages:
+    name: Packages
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - type: deb
+          - type: arch
+          - type: nix
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Build binaries
+        run: |
+          go build -o x11-sleep-manager ./cmd/x11-sleep-manager
+          go build -o x11smctl ./cmd/x11smctl
+
+      - name: Build Debian package
+        if: matrix.type == 'deb'
+        run: |
+          mkdir -p deb/usr/local/bin
+          mkdir -p deb/DEBIAN
+          cp x11-sleep-manager deb/usr/local/bin/
+          cp x11smctl deb/usr/local/bin/
+          cat > deb/DEBIAN/control <<EOF
+          Package: x11-sleep-manager
+          Version: ${{ github.ref_name }}
+          Section: utils
+          Priority: optional
+          Architecture: amd64
+          Maintainer: Joan Valduvieco Llopart <jvalduvieco@gmail.com>
+          Description: X11/i3 daemon bridging logind inhibitors to X11 lock behavior
+          EOF
+          dpkg-deb --build deb x11-sleep-manager_${{ github.ref_name }}_amd64.deb
+        shell: bash
+
+      - name: Build Arch package
+        if: matrix.type == 'arch'
+        run: |
+          mkdir -p pkg/x11-sleep-manager/usr/bin
+          cp x11-sleep-manager pkg/x11-sleep-manager/usr/bin/
+          cp x11smctl pkg/x11-sleep-manager/usr/bin/
+          cat > pkg/x11-sleep-manager/PKGBUILD <<'EOF'
+          pkgname=x11-sleep-manager
+          pkgver=${{ github.ref_name }}
+          pkgrel=1
+          pkgdesc="X11/i3 daemon bridging logind inhibitors to X11 lock behavior"
+          arch=('x86_64')
+          url="https://github.com/jvalduvieco/x11-sleep-manager"
+          license=('MIT')
+          provides=('x11-sleep-manager')
+          package() {
+            install -Dm755 x11-sleep-manager "$pkgdir/usr/bin/x11-sleep-manager"
+            install -Dm755 x11smctl "$pkgdir/usr/bin/x11smctl"
+          }
+          EOF
+          tar -czvf x11-sleep-manager-${{ github.ref_name }}-1-x86_64.tar.gz -C pkg .
+        shell: bash
+
+      - name: Build Nix package
+        if: matrix.type == 'nix'
+        run: |
+          cat > default.nix { pkgs ? import <nixpkgs> {} }:
+          pkgs.buildGoPackage {
+            pname = "x11-sleep-manager";
+            version = "${{ github.ref_name }}";
+            src = ./.;
+            goDeps = ./go.mod;
+            binaries = [ "x11-sleep-manager" "x11smctl" ];
+          }
+        shell: bash
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.type }}
+          path: |
+            *.deb
+            *.tar.gz
+            default.nix
