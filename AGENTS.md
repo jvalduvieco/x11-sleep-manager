@@ -24,13 +24,13 @@ The repository now contains the first bootstrap slice:
 - normalized inhibitor model in `internal/observe`
 - config-based inhibitor matching in `internal/matcher`
 - periodic reconcile loop over an inhibitor source abstraction
+- real `logind` D-Bus integration in `internal/observe`
 - daemon startup and signal handling in `cmd/x11-sleep-manager`
 - CLI `status` and `register-session` commands in `cmd/x11smctl`
 - in-memory X11 session registration captured from the CLI environment
 
 Not implemented yet:
 
-- real `logind` D-Bus integration
 - X11 command execution
 - `doctor`, `enable`, `disable`, `reconcile`, or config mutation endpoints
 - helper process control such as `xss-lock` pause/resume
@@ -84,7 +84,11 @@ Current status payload also includes:
 - `why`
 - `uid`
 
-The default app wiring currently uses a no-op source, so the reconcile loop runs and reports empty inhibitor state until real `logind` integration is added.
+The `NoopSource` still exists for tests and wiring experiments, but the default app wiring now uses the real system-bus `logind` source.
+
+`internal/observe` now also provides a real system-bus `logind` source that calls `org.freedesktop.login1.Manager.ListInhibitors` and normalizes the result.
+
+If the system bus cannot be reached at startup, app construction falls back to a static error source so the daemon can still start and report degraded reconcile status instead of failing closed.
 
 ## Current Matching Rules
 

@@ -23,7 +23,11 @@ type App struct {
 }
 
 func New(cfg config.Config, version string) *App {
-	return NewWithSource(cfg, version, observe.NoopSource{}, os.Getuid())
+	source, err := observe.NewSystemBusSource()
+	if err != nil {
+		source = observe.StaticErrorSource{Err: err}
+	}
+	return NewWithSource(cfg, version, source, os.Getuid())
 }
 
 func NewWithSource(cfg config.Config, version string, source observe.Source, selfUID int) *App {
