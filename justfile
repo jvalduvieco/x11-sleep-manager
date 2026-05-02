@@ -1,11 +1,12 @@
 # Development commands for x11-sleep-manager
 
 default := "help"
+set quiet
 
 @help:
     @echo "Available commands:"
     @echo "  just update-deps    - Update all Go dependencies to latest versions"
-    @echo "  just compile        - Build all binaries"
+    @echo "  just compile        - Build all binaries into bin/"
     @echo "  just test           - Run all tests"
     @echo "  just release [type] - Create a release (patch|minor|major), defaults to patch"
     @echo "  just check          - Run format check, tests, and build"
@@ -18,8 +19,9 @@ default := "help"
 
 @compile:
     @echo "Building binaries..."
-    @go build -o x11-sleep-manager ./cmd/x11-sleep-manager
-    @go build -o x11smctl ./cmd/x11smctl
+    @mkdir -p bin
+    @go build -o bin/x11-sleep-manager ./cmd/x11-sleep-manager
+    @go build -o bin/x11smctl ./cmd/x11smctl
     @echo "Build complete"
 
 @test:
