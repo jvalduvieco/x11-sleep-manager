@@ -157,6 +157,39 @@ func TestRuntimeControlEndpointPropagatesError(t *testing.T) {
 	}
 }
 
+func TestConfigEndpointServesEffectiveConfig(t *testing.T) {
+	socketPath := filepath.Join(t.TempDir(), "x11-sm.sock")
+	store := state.NewStore(config.Default(), "test")
+	server := NewServerWithSessionRegistration(socketPath, store, store)
+	if err := server.Start(); err != nil {
+		t.Fatalf("start server: %v", err)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		_ = server.Shutdown(ctx)
+	})
+
+	client := &http.Client{Transport: &http.Transport{DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+		return (&net.Dialer{}).DialContext(ctx, "unix", socketPath)
+	}}}
+	resp, err := client.Get("http://unix/v1/config")
+	if err != nil {
+		t.Fatalf("get config: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected status: %s", resp.Status)
+	}
+	var cfg config.Config
+	if err := json.NewDecoder(resp.Body).Decode(&cfg); err != nil {
+		t.Fatalf("decode config: %v", err)
+	}
+	if got, want := cfg.Match.Who[0], "OpenCode"; got != want {
+		t.Fatalf("unexpected config payload: %+v", cfg)
+	}
+}
+
 func TestSessionRegistrationEndpointStoresSession(t *testing.T) {
 	socketPath := filepath.Join(t.TempDir(), "x11-sm.sock")
 	store := state.NewStore(config.Default(), "test")

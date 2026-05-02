@@ -38,6 +38,7 @@ Not implemented yet:
 ## Current Control API
 
 - `GET /v1/status`
+- `GET /v1/config`
 - `POST /v1/session`
 - `POST /v1/reconcile`
 - `POST /v1/enable`
@@ -127,6 +128,7 @@ CLI command:
 - `x11smctl reconcile`
 - `x11smctl enable`
 - `x11smctl disable`
+- `x11smctl config get`
 
 Expected use:
 

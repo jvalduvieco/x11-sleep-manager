@@ -28,7 +28,7 @@ func run() error {
 	flag.Parse()
 
 	if flag.NArg() == 0 {
-		return fmt.Errorf("usage: x11smctl [--socket path] <status|register-session|reconcile|enable|disable|doctor>")
+		return fmt.Errorf("usage: x11smctl [--socket path] <status|register-session|reconcile|enable|disable|doctor|config get>")
 	}
 
 	switch flag.Arg(0) {
@@ -44,6 +44,11 @@ func run() error {
 		return postNoContentCommand(socketPath, "/v1/disable", "disabled")
 	case "doctor":
 		return runDoctor(socketPath)
+	case "config":
+		if flag.NArg() < 2 || flag.Arg(1) != "get" {
+			return fmt.Errorf("usage: x11smctl config get")
+		}
+		return printConfig(socketPath)
 	default:
 		return fmt.Errorf("unknown command %q", flag.Arg(0))
 	}
@@ -131,6 +136,28 @@ func runDoctor(socketPath string) error {
 	if !report.OK() {
 		return fmt.Errorf("doctor checks failed")
 	}
+	return nil
+}
+
+func printConfig(socketPath string) error {
+	client := newHTTPClient(socketPath)
+	resp, err := client.Get("http://unix/v1/config")
+	if err != nil {
+		return fmt.Errorf("request config: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("config request failed: %s", resp.Status)
+	}
+	var payload any
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		return fmt.Errorf("decode config response: %w", err)
+	}
+	encoded, err := json.MarshalIndent(payload, "", "  ")
+	if err != nil {
+		return fmt.Errorf("format config response: %w", err)
+	}
+	fmt.Println(string(encoded))
 	return nil
 }
 

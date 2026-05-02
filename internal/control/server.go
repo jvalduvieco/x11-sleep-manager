@@ -11,11 +11,16 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/jvalduvieco/x11_sleep_manager/internal/config"
 	"github.com/jvalduvieco/x11_sleep_manager/internal/state"
 )
 
 type StatusSource interface {
 	Snapshot() state.Snapshot
+}
+
+type ConfigSource interface {
+	Config() config.Config
 }
 
 type SessionRegistrar interface {
@@ -58,6 +63,14 @@ func NewServerWithSessionRegistration(socketPath string, source StatusSource, re
 
 func NewServerWithRuntimeControl(socketPath string, source StatusSource, registrar SessionRegistrar, runtime RuntimeController) *Server {
 	mux := http.NewServeMux()
+	if configSource, ok := source.(ConfigSource); ok {
+		mux.HandleFunc("GET /v1/config", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			if err := json.NewEncoder(w).Encode(configSource.Config()); err != nil {
+				http.Error(w, fmt.Sprintf("encode response: %v", err), http.StatusInternalServerError)
+			}
+		})
+	}
 	mux.HandleFunc("GET /v1/status", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(w).Encode(source.Snapshot()); err != nil {

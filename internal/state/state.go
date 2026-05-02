@@ -96,6 +96,12 @@ func (s *Store) Snapshot() Snapshot {
 	}
 }
 
+func (s *Store) Config() config.Config {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.config
+}
+
 func (s *Store) Transition(next Mode) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
