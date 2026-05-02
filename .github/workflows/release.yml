@@ -35,10 +35,10 @@ jobs:
 
       - name: Build Debian package
         run: |
-          mkdir -p deb/usr/local/bin
+          mkdir -p deb/usr/bin
           mkdir -p deb/DEBIAN
-          cp x11-sleep-manager deb/usr/local/bin/
-          cp x11smctl deb/usr/local/bin/
+          cp x11-sleep-manager deb/usr/bin/
+          cp x11smctl deb/usr/bin/
           cat > deb/DEBIAN/control <<EOF
           Package: x11-sleep-manager
           Version: ${{ steps.version.outputs.version }}
