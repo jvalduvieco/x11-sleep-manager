@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/jvalduvieco/x11_sleep_manager/internal/config"
+	"github.com/jvalduvieco/x11_sleep_manager/internal/doctor"
 )
 
 func main() {
@@ -27,7 +28,7 @@ func run() error {
 	flag.Parse()
 
 	if flag.NArg() == 0 {
-		return fmt.Errorf("usage: x11smctl [--socket path] <status|register-session|reconcile|enable|disable>")
+		return fmt.Errorf("usage: x11smctl [--socket path] <status|register-session|reconcile|enable|disable|doctor>")
 	}
 
 	switch flag.Arg(0) {
@@ -41,6 +42,8 @@ func run() error {
 		return postNoContentCommand(socketPath, "/v1/enable", "enabled")
 	case "disable":
 		return postNoContentCommand(socketPath, "/v1/disable", "disabled")
+	case "doctor":
+		return runDoctor(socketPath)
 	default:
 		return fmt.Errorf("unknown command %q", flag.Arg(0))
 	}
@@ -117,6 +120,17 @@ func postNoContentCommand(socketPath, path, success string) error {
 		return fmt.Errorf("request %s failed: %s", path, resp.Status)
 	}
 	fmt.Println(success)
+	return nil
+}
+
+func runDoctor(socketPath string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	report := doctor.Run(ctx, socketPath, doctor.DefaultRunner())
+	fmt.Println(report.RenderText())
+	if !report.OK() {
+		return fmt.Errorf("doctor checks failed")
+	}
 	return nil
 }
 

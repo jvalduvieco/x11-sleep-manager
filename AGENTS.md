@@ -28,12 +28,12 @@ The repository now contains the first bootstrap slice:
 - `xset q` parsing and X11 override control in `internal/x11state`
 - helper process pause/resume control in `internal/processctl`
 - daemon startup and signal handling in `cmd/x11-sleep-manager`
-- CLI `status` and `register-session` commands in `cmd/x11smctl`
+- CLI `status`, `register-session`, `reconcile`, `enable`, `disable`, and `doctor` commands in `cmd/x11smctl`
 - in-memory X11 session registration captured from the CLI environment
 
 Not implemented yet:
 
-- `doctor` or config mutation endpoints
+- config mutation endpoints
 
 ## Current Control API
 
