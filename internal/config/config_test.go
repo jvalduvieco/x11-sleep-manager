@@ -19,6 +19,9 @@ func TestDefaultUsesRuntimeDirWhenSet(t *testing.T) {
 	if got, want := cfg.Reconcile.Interval.Duration, 15*time.Second; got != want {
 		t.Fatalf("interval mismatch: got %s want %s", got, want)
 	}
+	if !cfg.X11.DisableScreenSaver || !cfg.X11.DisableDPMS || !cfg.X11.RestorePreviousState {
+		t.Fatal("expected X11 defaults to be enabled")
+	}
 }
 
 func TestLoadEmptyPathReturnsDefaults(t *testing.T) {

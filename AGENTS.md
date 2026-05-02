@@ -25,13 +25,13 @@ The repository now contains the first bootstrap slice:
 - config-based inhibitor matching in `internal/matcher`
 - periodic reconcile loop over an inhibitor source abstraction
 - real `logind` D-Bus integration in `internal/observe`
+- `xset q` parsing and X11 override control in `internal/x11state`
 - daemon startup and signal handling in `cmd/x11-sleep-manager`
 - CLI `status` and `register-session` commands in `cmd/x11smctl`
 - in-memory X11 session registration captured from the CLI environment
 
 Not implemented yet:
 
-- X11 command execution
 - `doctor`, `enable`, `disable`, `reconcile`, or config mutation endpoints
 - helper process control such as `xss-lock` pause/resume
 
@@ -74,6 +74,7 @@ Current status payload also includes:
 - last reconcile timestamp
 - total reconcile count
 - reconcile failure count
+- whether X11 overrides are currently active
 
 ## Current Inhibitor Model
 
@@ -123,6 +124,29 @@ CLI command:
 Expected use:
 
 - invoke `x11smctl register-session` from the live i3/X11 session so the daemon learns the correct X11 environment before later X11 actions are implemented
+
+## Current X11 Behavior
+
+`internal/x11state` currently manages `xset`-based state only.
+
+Implemented behavior:
+
+- parse `xset q` output for screensaver timeout/cycle and DPMS enabled state
+- on first transition to `inhibited`, save current `xset` state and apply:
+  - `xset s off`
+  - `xset -dpms`
+- on transition back to `idle`, restore the saved screensaver timeout/cycle and DPMS enabled state
+- best-effort restore on daemon shutdown if overrides are still active and a session is registered
+
+Current config defaults for `x11`:
+
+- `disable_screensaver: true`
+- `disable_dpms: true`
+- `restore_previous_state: true`
+
+Current limitation:
+
+- X11 actions require a registered session; matching inhibitors without one move the daemon to `degraded`
 
 ## Config Rules
 

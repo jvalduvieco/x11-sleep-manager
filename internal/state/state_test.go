@@ -115,3 +115,11 @@ func TestRecordReconcileFailureKeepsFailureStats(t *testing.T) {
 		t.Fatalf("unexpected last error: %q", snapshot.LastError)
 	}
 }
+
+func TestSetX11OverridesActiveIsReflectedInSnapshot(t *testing.T) {
+	store := NewStore(config.Default(), "dev")
+	store.SetX11OverridesActive(true)
+	if !store.Snapshot().X11OverridesActive {
+		t.Fatal("expected x11 overrides to be active")
+	}
+}

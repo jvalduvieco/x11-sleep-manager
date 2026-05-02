@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"github.com/jvalduvieco/x11_sleep_manager/internal/matcher"
 	"github.com/jvalduvieco/x11_sleep_manager/internal/observe"
 	"github.com/jvalduvieco/x11_sleep_manager/internal/state"
+	"github.com/jvalduvieco/x11_sleep_manager/internal/x11state"
 )
 
 type App struct {
@@ -20,6 +22,7 @@ type App struct {
 	source        observe.Source
 	selfUID       int
 	stopReconcile context.CancelFunc
+	x11           *x11state.Controller
 }
 
 func New(cfg config.Config, version string) *App {
@@ -38,6 +41,7 @@ func NewWithSource(cfg config.Config, version string, source observe.Source, sel
 		config:  cfg,
 		source:  source,
 		selfUID: selfUID,
+		x11:     x11state.NewController(cfg.X11, x11state.CommandRunner{}),
 	}
 }
 
@@ -58,7 +62,12 @@ func (a *App) Shutdown(ctx context.Context) error {
 	if a.stopReconcile != nil {
 		a.stopReconcile()
 	}
-	return a.server.Shutdown(ctx)
+	var restoreErr error
+	if snapshot := a.store.Snapshot(); a.x11.Applied() && snapshot.Session != nil {
+		restoreErr = a.x11.Restore(ctx, *snapshot.Session)
+		a.store.SetX11OverridesActive(false)
+	}
+	return errors.Join(restoreErr, a.server.Shutdown(ctx))
 }
 
 func (a *App) Snapshot() state.Snapshot {
@@ -76,8 +85,36 @@ func (a *App) Reconcile(ctx context.Context) error {
 	matched := matcher.Filter(inhibitors, a.config.Match, a.selfUID)
 	a.store.RecordReconcileSuccess(matched)
 	if len(matched) > 0 {
+		snapshot := a.store.Snapshot()
+		if snapshot.Session == nil {
+			err := errors.New("matching inhibitor active but no session registered")
+			a.store.SetLastError(err)
+			a.store.Transition(state.ModeDegraded)
+			return err
+		}
+		if err := a.x11.Apply(ctx, *snapshot.Session); err != nil {
+			a.store.SetLastError(err)
+			a.store.Transition(state.ModeDegraded)
+			return fmt.Errorf("apply x11 overrides: %w", err)
+		}
+		a.store.SetX11OverridesActive(true)
 		a.store.Transition(state.ModeInhibited)
 	} else {
+		snapshot := a.store.Snapshot()
+		if a.x11.Applied() {
+			if snapshot.Session == nil {
+				err := errors.New("cannot restore x11 state without registered session")
+				a.store.SetLastError(err)
+				a.store.Transition(state.ModeDegraded)
+				return err
+			}
+			if err := a.x11.Restore(ctx, *snapshot.Session); err != nil {
+				a.store.SetLastError(err)
+				a.store.Transition(state.ModeDegraded)
+				return fmt.Errorf("restore x11 overrides: %w", err)
+			}
+			a.store.SetX11OverridesActive(false)
+		}
 		a.store.Transition(state.ModeIdle)
 	}
 

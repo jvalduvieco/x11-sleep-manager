@@ -14,6 +14,7 @@ const defaultSocketName = "x11_sleep_manager.sock"
 type Config struct {
 	Socket    SocketConfig    `json:"socket"`
 	Match     MatchConfig     `json:"match"`
+	X11       X11Config       `json:"x11"`
 	Reconcile ReconcileConfig `json:"reconcile"`
 	Logging   LoggingConfig   `json:"logging"`
 }
@@ -30,6 +31,12 @@ type MatchConfig struct {
 
 type ReconcileConfig struct {
 	Interval Duration `json:"interval"`
+}
+
+type X11Config struct {
+	DisableScreenSaver   bool `json:"disable_screensaver"`
+	DisableDPMS          bool `json:"disable_dpms"`
+	RestorePreviousState bool `json:"restore_previous_state"`
 }
 
 type LoggingConfig struct {
@@ -56,6 +63,11 @@ func Default() Config {
 			UID:     "self",
 			Who:     []string{"OpenCode"},
 			WhatAny: []string{"idle", "sleep"},
+		},
+		X11: X11Config{
+			DisableScreenSaver:   true,
+			DisableDPMS:          true,
+			RestorePreviousState: true,
 		},
 		Reconcile: ReconcileConfig{
 			Interval: Duration{Duration: 15 * time.Second},

@@ -30,6 +30,7 @@ type Snapshot struct {
 	LastReconcileAt        *time.Time          `json:"last_reconcile_at,omitempty"`
 	ReconcileCount         int                 `json:"reconcile_count"`
 	ReconcileFailures      int                 `json:"reconcile_failures"`
+	X11OverridesActive     bool                `json:"x11_overrides_active"`
 	LastError              string              `json:"last_error,omitempty"`
 }
 
@@ -42,19 +43,20 @@ type Session struct {
 }
 
 type Store struct {
-	mu                sync.RWMutex
-	state             Mode
-	started           time.Time
-	changed           time.Time
-	config            config.Config
-	version           string
-	lastErr           string
-	session           *Session
-	matching          []observe.Inhibitor
-	lastReconcileAt   *time.Time
-	reconcileCount    int
-	reconcileFailures int
-	clockNow          func() time.Time
+	mu                 sync.RWMutex
+	state              Mode
+	started            time.Time
+	changed            time.Time
+	config             config.Config
+	version            string
+	lastErr            string
+	session            *Session
+	matching           []observe.Inhibitor
+	lastReconcileAt    *time.Time
+	reconcileCount     int
+	reconcileFailures  int
+	x11OverridesActive bool
+	clockNow           func() time.Time
 }
 
 func NewStore(cfg config.Config, version string) *Store {
@@ -86,6 +88,7 @@ func (s *Store) Snapshot() Snapshot {
 		LastReconcileAt:        cloneTimePtr(s.lastReconcileAt),
 		ReconcileCount:         s.reconcileCount,
 		ReconcileFailures:      s.reconcileFailures,
+		X11OverridesActive:     s.x11OverridesActive,
 		LastError:              s.lastErr,
 	}
 }
@@ -143,6 +146,12 @@ func (s *Store) RecordReconcileFailure(err error) {
 	if err != nil {
 		s.lastErr = err.Error()
 	}
+}
+
+func (s *Store) SetX11OverridesActive(active bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.x11OverridesActive = active
 }
 
 func cloneSession(session *Session) *Session {
