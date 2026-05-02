@@ -240,6 +240,21 @@ Defaults:
 - logging level: `info`
 - logging format: `json`
 
+## Live Validation Results
+
+End-to-end validation completed successfully on 2026-05-02:
+
+- **Test**: 220s OpenCode inhibitor detection with xss-lock paused
+- **Result**: Daemon remained in `inhibited` state throughout, screen stayed unlocked
+- **Baseline normalization**: `x11smctl disable` → `enable` → `reconcile`
+- **Final state**: inhibited (1 matching inhibitor), xss-lock paused (Tl), X11 overrides active
+
+Verified that daemon correctly:
+- Detects real OpenCode inhibitor from logind D-Bus
+- Pauses xss-lock when OpenCode inhibitor present
+- Disables screensaver/DPMS when inhibited
+- Maintains state throughout inhibitor lifecycle
+
 ## Testing Baseline
 
 After each iteration:
