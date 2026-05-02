@@ -1,12 +1,53 @@
 name: Release
 
 on:
-  release:
-    types: [published]
+  push:
+    tags:
+      - 'v*.*.*'
 
 jobs:
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract version
+        id: version
+        run: echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          if [ -n "$PREV_TAG" ]; then
+            CHANGES=$(git log --pretty=format:"- %s (%h)" $PREV_TAG..HEAD --no-merges)
+          else
+            CHANGES=$(git log --pretty=format:"- %s (%h)" --no-merges -n 50)
+          fi
+          echo "changelog<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref_name }}
+          release_name: ${{ github.ref_name }}
+          body: |
+            ## Changes
+
+            ${{ steps.changelog.outputs.changelog }}
+          draft: false
+          prerelease: false
+
   packages:
     name: Packages
+    needs: release
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -16,6 +57,10 @@ jobs:
           - type: nix
     steps:
       - uses: actions/checkout@v4
+
+      - name: Extract version
+        id: version
+        run: echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -36,14 +81,14 @@ jobs:
           cp x11smctl deb/usr/local/bin/
           cat > deb/DEBIAN/control <<EOF
           Package: x11-sleep-manager
-          Version: ${{ github.ref_name }}
+          Version: ${{ steps.version.outputs.version }}
           Section: utils
           Priority: optional
           Architecture: amd64
           Maintainer: Joan Valduvieco Llopart <jvalduvieco@gmail.com>
           Description: X11/i3 daemon bridging logind inhibitors to X11 lock behavior
           EOF
-          dpkg-deb --build deb x11-sleep-manager_${{ github.ref_name }}_amd64.deb
+          dpkg-deb --build deb x11-sleep-manager_${{ steps.version.outputs.version }}_amd64.deb
         shell: bash
 
       - name: Build Arch package
@@ -54,7 +99,7 @@ jobs:
           cp x11smctl pkg/x11-sleep-manager/usr/bin/
           cat > pkg/x11-sleep-manager/PKGBUILD <<'EOF'
           pkgname=x11-sleep-manager
-          pkgver=${{ github.ref_name }}
+          pkgver=${{ steps.version.outputs.version }}
           pkgrel=1
           pkgdesc="X11/i3 daemon bridging logind inhibitors to X11 lock behavior"
           arch=('x86_64')
@@ -66,7 +111,7 @@ jobs:
             install -Dm755 x11smctl "$pkgdir/usr/bin/x11smctl"
           }
           EOF
-          tar -czvf x11-sleep-manager-${{ github.ref_name }}-1-x86_64.tar.gz -C pkg .
+          tar -czvf x11-sleep-manager-${{ steps.version.outputs.version }}-1-x86_64.tar.gz -C pkg .
         shell: bash
 
       - name: Build Nix package
@@ -75,18 +120,20 @@ jobs:
           cat > default.nix { pkgs ? import <nixpkgs> {} }:
           pkgs.buildGoPackage {
             pname = "x11-sleep-manager";
-            version = "${{ github.ref_name }}";
+            version = "${{ steps.version.outputs.version }}";
             src = ./.;
             goDeps = ./go.mod;
             binaries = [ "x11-sleep-manager" "x11smctl" ];
           }
         shell: bash
 
-      - name: Upload release artifacts
-        uses: actions/upload-artifact@v4
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v1
         with:
-          name: release-${{ matrix.type }}
-          path: |
+          tag_name: ${{ github.ref_name }}
+          files: |
             *.deb
             *.tar.gz
             default.nix
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
