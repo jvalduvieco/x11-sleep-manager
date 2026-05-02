@@ -1,0 +1,98 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract version
+        id: version
+        run: echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Generate changelog
+        run: |
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          if [ -n "$PREV_TAG" ]; then
+            CHANGES=$(git log --pretty=format:"- %s (%h)" $PREV_TAG..HEAD --no-merges)
+          else
+            CHANGES=$(git log --pretty=format:"- %s (%h)" --no-merges -n 50)
+          fi
+          printf '%s' "$CHANGES" > changelog.txt
+
+      - name: Build binaries
+        run: |
+          go build -o x11-sleep-manager ./cmd/x11-sleep-manager
+          go build -o x11smctl ./cmd/x11smctl
+
+      - name: Build Debian package
+        run: |
+          mkdir -p deb/usr/bin
+          mkdir -p deb/DEBIAN
+          cp x11-sleep-manager deb/usr/bin/
+          cp x11smctl deb/usr/bin/
+          cat > deb/DEBIAN/control <<EOF
+          Package: x11-sleep-manager
+          Version: ${{ steps.version.outputs.version }}
+          Section: utils
+          Priority: optional
+          Architecture: amd64
+          Maintainer: Joan Valduvieco Llopart <jvalduvieco@gmail.com>
+          Description: X11/i3 daemon bridging logind inhibitors to X11 lock behavior
+          EOF
+          dpkg-deb --build deb x11-sleep-manager_${{ steps.version.outputs.version }}_amd64.deb
+
+      - name: Build Arch package
+        run: |
+          mkdir -p pkg/x11-sleep-manager/usr/bin
+          cp x11-sleep-manager pkg/x11-sleep-manager/usr/bin/
+          cp x11smctl pkg/x11-sleep-manager/usr/bin/
+          cat > pkg/x11-sleep-manager/PKGBUILD <<'EOF'
+          pkgname=x11-sleep-manager
+          pkgver=${{ steps.version.outputs.version }}
+          pkgrel=1
+          pkgdesc="X11/i3 daemon bridging logind inhibitors to X11 lock behavior"
+          arch=('x86_64')
+          url="https://github.com/jvalduvieco/x11-sleep-manager"
+          license=('MIT')
+          provides=('x11-sleep-manager')
+          package() {
+            install -Dm755 x11-sleep-manager "$pkgdir/usr/bin/x11-sleep-manager"
+            install -Dm755 x11smctl "$pkgdir/usr/bin/x11smctl"
+          }
+          EOF
+          tar -czvf x11-sleep-manager-${{ steps.version.outputs.version }}-1-x86_64.tar.gz -C pkg .
+
+      - name: Build Nix package
+        run: |
+          cat > default.nix <<'EOF'
+          { pkgs ? import <nixpkgs> {} }:
+
+          pkgs.buildGoModule {
+            pname = "x11-sleep-manager";
+            version = "${{ steps.version.outputs.version }}";
+            src = ./.;
+            vendorHash = "";
+          }
+          EOF
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          name: ${{ steps.version.outputs.version }}
+          body_path: changelog.txt
+          files: |
+            *.deb
+            *.tar.gz
+            default.nix
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
