@@ -16,7 +16,11 @@ jobs:
 
       - name: Extract version
         id: version
-        run: echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        run: |
+          TAG_VERSION=${GITHUB_REF#refs/tags/}
+          DEB_VERSION=${TAG_VERSION#v}
+          echo "version=$TAG_VERSION" >> $GITHUB_OUTPUT
+          echo "deb_version=$DEB_VERSION" >> $GITHUB_OUTPUT
 
       - name: Generate changelog
         run: |
@@ -41,14 +45,14 @@ jobs:
           cp x11smctl deb/usr/bin/
           cat > deb/DEBIAN/control <<EOF
           Package: x11-sleep-manager
-          Version: ${{ steps.version.outputs.version }}
+          Version: ${{ steps.version.outputs.deb_version }}
           Section: utils
           Priority: optional
           Architecture: amd64
           Maintainer: Joan Valduvieco Llopart <jvalduvieco@gmail.com>
           Description: X11/i3 daemon bridging logind inhibitors to X11 lock behavior
           EOF
-          dpkg-deb --build deb x11-sleep-manager_${{ steps.version.outputs.version }}_amd64.deb
+          dpkg-deb --build deb x11-sleep-manager_${{ steps.version.outputs.deb_version }}_amd64.deb
 
       - name: Build Arch package
         run: |
