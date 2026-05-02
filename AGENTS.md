@@ -28,7 +28,7 @@ The repository now contains the first bootstrap slice:
 - `xset q` parsing and X11 override control in `internal/x11state`
 - helper process pause/resume control in `internal/processctl`
 - daemon startup and signal handling in `cmd/x11-sleep-manager`
-- CLI `status`, `register-session`, `reconcile`, `enable`, `disable`, and `doctor` commands in `cmd/x11smctl`
+- CLI `status`, `events`, `register-session`, `reconcile`, `enable`, `disable`, `doctor`, and `config get` commands in `cmd/x11smctl`
 - in-memory X11 session registration captured from the CLI environment
 
 Not implemented yet:
@@ -142,6 +142,7 @@ It currently records:
 CLI command:
 
 - `x11smctl register-session`
+- `x11smctl events`
 - `x11smctl reconcile`
 - `x11smctl enable`
 - `x11smctl disable`

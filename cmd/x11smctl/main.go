@@ -28,12 +28,14 @@ func run() error {
 	flag.Parse()
 
 	if flag.NArg() == 0 {
-		return fmt.Errorf("usage: x11smctl [--socket path] <status|register-session|reconcile|enable|disable|doctor|config get>")
+		return fmt.Errorf("usage: x11smctl [--socket path] <status|events|register-session|reconcile|enable|disable|doctor|config get>")
 	}
 
 	switch flag.Arg(0) {
 	case "status":
 		return printStatus(socketPath)
+	case "events":
+		return printJSONGet(socketPath, "/v1/events", "events")
 	case "register-session":
 		return registerSession(socketPath)
 	case "reconcile":
@@ -55,30 +57,7 @@ func run() error {
 }
 
 func printStatus(socketPath string) error {
-	client := newHTTPClient(socketPath)
-
-	resp, err := client.Get("http://unix/v1/status")
-	if err != nil {
-		return fmt.Errorf("request status: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("status request failed: %s", resp.Status)
-	}
-
-	var payload any
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
-		return fmt.Errorf("decode status response: %w", err)
-	}
-
-	encoded, err := json.MarshalIndent(payload, "", "  ")
-	if err != nil {
-		return fmt.Errorf("format status response: %w", err)
-	}
-
-	fmt.Println(string(encoded))
-	return nil
+	return printJSONGet(socketPath, "/v1/status", "status")
 }
 
 type sessionRegistrationRequest struct {
@@ -140,22 +119,26 @@ func runDoctor(socketPath string) error {
 }
 
 func printConfig(socketPath string) error {
+	return printJSONGet(socketPath, "/v1/config", "config")
+}
+
+func printJSONGet(socketPath, path, name string) error {
 	client := newHTTPClient(socketPath)
-	resp, err := client.Get("http://unix/v1/config")
+	resp, err := client.Get("http://unix" + path)
 	if err != nil {
-		return fmt.Errorf("request config: %w", err)
+		return fmt.Errorf("request %s: %w", name, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("config request failed: %s", resp.Status)
+		return fmt.Errorf("%s request failed: %s", name, resp.Status)
 	}
 	var payload any
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
-		return fmt.Errorf("decode config response: %w", err)
+		return fmt.Errorf("decode %s response: %w", name, err)
 	}
 	encoded, err := json.MarshalIndent(payload, "", "  ")
 	if err != nil {
-		return fmt.Errorf("format config response: %w", err)
+		return fmt.Errorf("format %s response: %w", name, err)
 	}
 	fmt.Println(string(encoded))
 	return nil
