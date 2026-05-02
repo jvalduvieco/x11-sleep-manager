@@ -76,12 +76,11 @@ jobs:
           cat > default.nix <<'EOF'
           { pkgs ? import <nixpkgs> {} }:
 
-          pkgs.buildGoPackage {
+          pkgs.buildGoModule {
             pname = "x11-sleep-manager";
             version = "${{ steps.version.outputs.version }}";
             src = ./.;
-            goDeps = ./go.mod;
-            binaries = [ "x11-sleep-manager" "x11smctl" ];
+            vendorHash = "";
           }
           EOF
 
