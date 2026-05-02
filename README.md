@@ -1,5 +1,8 @@
 # x11_sleep_manager
 
+[![Validate](https://github.com/jvalduvieco/x11-sleep-manager/actions/workflows/validate.yml/badge.svg)](https://github.com/jvalduvieco/x11-sleep-manager/actions)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 `x11_sleep_manager` is a user-session daemon and companion CLI for X11/i3 environments.
 
 It watches `systemd-logind` inhibitor state and applies X11-compatible session policy when matching inhibitors are active. The primary goal is to bridge `systemd-inhibit` with classic X11 idle and lock tooling such as `xset`, `xss-lock`, and `slock`.
