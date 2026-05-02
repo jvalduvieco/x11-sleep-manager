@@ -17,7 +17,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
+          go-version: '1.24'
 
       - name: Run gofmt
         run: |
@@ -34,3 +34,9 @@ jobs:
         run: |
           go build -o x11-sleep-manager ./cmd/x11-sleep-manager
           go build -o x11smctl ./cmd/x11smctl
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@main
+
+      - name: Build Nix package
+        run: nix-build default.nix --argstr version dev

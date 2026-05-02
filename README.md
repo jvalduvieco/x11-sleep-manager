@@ -46,6 +46,18 @@ The daemon now has a working first implementation slice with:
 - example config: `examples/config.json`
 - example `systemd --user` unit: `examples/systemd-user/x11-sleep-manager.service`
 
+## Nix
+
+The repository now includes a tracked `default.nix` for the daemon and CLI.
+
+Build it with:
+
+```sh
+nix-build default.nix --argstr version dev
+```
+
+The package wraps both binaries with `xset` on `PATH`, which avoids a common runtime failure on Nix-managed systems.
+
 ## Testing Expectation
 
 The implementation is expected to ship with automated tests from the first functional slice onward.

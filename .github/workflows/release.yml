@@ -32,10 +32,18 @@ jobs:
           fi
           printf '%s' "$CHANGES" > changelog.txt
 
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
       - name: Build binaries
         run: |
           go build -o x11-sleep-manager ./cmd/x11-sleep-manager
           go build -o x11smctl ./cmd/x11smctl
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@main
 
       - name: Build Debian package
         run: |
@@ -77,16 +85,7 @@ jobs:
 
       - name: Build Nix package
         run: |
-          cat > default.nix <<'EOF'
-          { pkgs ? import <nixpkgs> {} }:
-
-          pkgs.buildGoModule {
-            pname = "x11-sleep-manager";
-            version = "${{ steps.version.outputs.version }}";
-            src = ./.;
-            vendorHash = "";
-          }
-          EOF
+          nix-build default.nix --argstr version "${{ steps.version.outputs.deb_version }}"
 
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2

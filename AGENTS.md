@@ -37,6 +37,14 @@ Not implemented yet:
 
 The repository now also includes packaging and operator examples under `examples/` and a live validation guide in `docs/manual-smoke-test.md`.
 
+Current packaging note:
+
+- tracked `default.nix` now builds both binaries, wraps them with `xset` on `PATH`, and is validated in CI with `nix-build`
+
+Current release workflow note:
+
+- `.github/workflows/release.yml` requires `permissions: contents: write` so `softprops/action-gh-release` can create releases with `GITHUB_TOKEN`
+- release and validation workflows now pin Go `1.24` to match `go.mod`
 ## Current Control API
 
 - `GET /v1/status`
