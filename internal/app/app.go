@@ -180,6 +180,21 @@ func (a *App) Disable(ctx context.Context) error {
 	return nil
 }
 
+func (a *App) UpdateConfig(_ context.Context, patch config.ConfigPatch) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	next, err := a.config.ApplyPatch(patch)
+	if err != nil {
+		return fmt.Errorf("apply config patch: %w", err)
+	}
+	a.config = next
+	a.x11.SetConfig(next.X11)
+	a.processes.SetConfig(next.Processes)
+	a.store.UpdateConfig(next)
+	return nil
+}
+
 func (a *App) runReconcileLoop(ctx context.Context) {
 	_ = a.Reconcile(ctx)
 

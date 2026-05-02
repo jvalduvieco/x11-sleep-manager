@@ -20,6 +20,12 @@ type Config struct {
 	Logging   LoggingConfig   `json:"logging"`
 }
 
+type ConfigPatch struct {
+	Match     *MatchConfig     `json:"match,omitempty"`
+	X11       *X11Config       `json:"x11,omitempty"`
+	Processes *ProcessesConfig `json:"processes,omitempty"`
+}
+
 type SocketConfig struct {
 	Path string `json:"path"`
 }
@@ -122,6 +128,23 @@ func (c Config) Validate() error {
 		return errors.New("logging.format must not be empty")
 	}
 	return nil
+}
+
+func (c Config) ApplyPatch(patch ConfigPatch) (Config, error) {
+	next := c
+	if patch.Match != nil {
+		next.Match = *patch.Match
+	}
+	if patch.X11 != nil {
+		next.X11 = *patch.X11
+	}
+	if patch.Processes != nil {
+		next.Processes = *patch.Processes
+	}
+	if err := next.Validate(); err != nil {
+		return Config{}, err
+	}
+	return next, nil
 }
 
 func (d Duration) MarshalJSON() ([]byte, error) {

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -28,7 +29,7 @@ func run() error {
 	flag.Parse()
 
 	if flag.NArg() == 0 {
-		return fmt.Errorf("usage: x11smctl [--socket path] <status|events|register-session|reconcile|enable|disable|doctor|config get>")
+		return fmt.Errorf("usage: x11smctl [--socket path] <status|events|register-session|reconcile|enable|disable|doctor|config get|config set>")
 	}
 
 	switch flag.Arg(0) {
@@ -47,10 +48,16 @@ func run() error {
 	case "doctor":
 		return runDoctor(socketPath)
 	case "config":
-		if flag.NArg() < 2 || flag.Arg(1) != "get" {
-			return fmt.Errorf("usage: x11smctl config get")
+		if flag.NArg() < 2 {
+			return fmt.Errorf("usage: x11smctl config <get|set>")
 		}
-		return printConfig(socketPath)
+		if flag.Arg(1) == "get" {
+			return printConfig(socketPath)
+		}
+		if flag.Arg(1) == "set" {
+			return setConfig(socketPath, flag.Args()[2:])
+		}
+		return fmt.Errorf("usage: x11smctl config <get|set>")
 	default:
 		return fmt.Errorf("unknown command %q", flag.Arg(0))
 	}
@@ -122,6 +129,24 @@ func printConfig(socketPath string) error {
 	return printJSONGet(socketPath, "/v1/config", "config")
 }
 
+func setConfig(socketPath string, args []string) error {
+	body, err := readConfigPatchInput(args)
+	if err != nil {
+		return err
+	}
+	client := newHTTPClient(socketPath)
+	resp, err := client.Post("http://unix/v1/config", "application/json", bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("post config: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		return fmt.Errorf("config update failed: %s", resp.Status)
+	}
+	fmt.Println("config updated")
+	return nil
+}
+
 func printJSONGet(socketPath, path, name string) error {
 	client := newHTTPClient(socketPath)
 	resp, err := client.Get("http://unix" + path)
@@ -160,6 +185,20 @@ func buildSessionRegistrationRequest() (sessionRegistrationRequest, error) {
 	}
 
 	return payload, nil
+}
+
+func readConfigPatchInput(args []string) ([]byte, error) {
+	if len(args) > 0 {
+		return []byte(args[0]), nil
+	}
+	body, err := io.ReadAll(os.Stdin)
+	if err != nil {
+		return nil, fmt.Errorf("read config patch from stdin: %w", err)
+	}
+	if len(bytes.TrimSpace(body)) == 0 {
+		return nil, fmt.Errorf("config patch is empty")
+	}
+	return body, nil
 }
 
 func newHTTPClient(socketPath string) *http.Client {

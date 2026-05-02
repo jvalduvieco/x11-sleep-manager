@@ -86,3 +86,23 @@ func TestLoadRejectsInvalidConfig(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+func TestApplyPatchReplacesSupportedSections(t *testing.T) {
+	cfg := Default()
+	next, err := cfg.ApplyPatch(ConfigPatch{
+		Match: &MatchConfig{UID: "self", Who: []string{"Editor"}, WhatAny: []string{"idle"}},
+		X11:   &X11Config{DisableScreenSaver: false, DisableDPMS: true, RestorePreviousState: true},
+	})
+	if err != nil {
+		t.Fatalf("ApplyPatch returned error: %v", err)
+	}
+	if got, want := next.Match.Who[0], "Editor"; got != want {
+		t.Fatalf("unexpected match patch result: %+v", next.Match)
+	}
+	if next.X11.DisableScreenSaver {
+		t.Fatal("expected x11 patch to be applied")
+	}
+	if got, want := next.Processes.Pause[0], "xss-lock"; got != want {
+		t.Fatalf("unexpected untouched processes config: %+v", next.Processes)
+	}
+}

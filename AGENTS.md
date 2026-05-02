@@ -33,13 +33,14 @@ The repository now contains the first bootstrap slice:
 
 Not implemented yet:
 
-- config mutation endpoints
+- broader config mutation coverage beyond the currently supported runtime-safe sections
 
 ## Current Control API
 
 - `GET /v1/status`
 - `GET /v1/config`
 - `GET /v1/events`
+- `POST /v1/config`
 - `POST /v1/session`
 - `POST /v1/reconcile`
 - `POST /v1/enable`
@@ -146,7 +147,20 @@ CLI command:
 - `x11smctl reconcile`
 - `x11smctl enable`
 - `x11smctl disable`
+- `x11smctl config set`
 - `x11smctl config get`
+
+Current runtime config mutation support is intentionally constrained to whole-section replacement for:
+
+- `match`
+- `x11`
+- `processes`
+
+Not currently live-mutable:
+
+- `socket`
+- `reconcile.interval`
+- `logging`
 
 Expected use:
 

@@ -35,6 +35,7 @@ type RuntimeController interface {
 	Reconcile(ctx context.Context) error
 	Enable(ctx context.Context) error
 	Disable(ctx context.Context) error
+	UpdateConfig(ctx context.Context, patch config.ConfigPatch) error
 }
 
 type Server struct {
@@ -110,6 +111,19 @@ func NewServerWithRuntimeControl(socketPath string, source StatusSource, registr
 		w.WriteHeader(http.StatusNoContent)
 	})
 	if runtime != nil {
+		mux.HandleFunc("POST /v1/config", func(w http.ResponseWriter, r *http.Request) {
+			defer r.Body.Close()
+			var patch config.ConfigPatch
+			if err := json.NewDecoder(r.Body).Decode(&patch); err != nil {
+				http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)
+				return
+			}
+			if err := runtime.UpdateConfig(r.Context(), patch); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
+		})
 		mux.HandleFunc("POST /v1/reconcile", func(w http.ResponseWriter, r *http.Request) {
 			if err := runtime.Reconcile(r.Context()); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)

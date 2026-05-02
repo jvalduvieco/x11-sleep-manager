@@ -111,6 +111,13 @@ func (s *Store) Config() config.Config {
 	return s.config
 }
 
+func (s *Store) UpdateConfig(cfg config.Config) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.config = cfg
+	s.appendEventLocked("config.updated", "")
+}
+
 func (s *Store) Events() []Event {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

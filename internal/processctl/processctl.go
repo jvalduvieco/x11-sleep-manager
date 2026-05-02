@@ -90,6 +90,10 @@ func (c *Controller) HasPaused() bool {
 	return len(c.paused) > 0
 }
 
+func (c *Controller) SetConfig(cfg config.ProcessesConfig) {
+	c.config = cfg
+}
+
 func (ProcInspector) FindByName(_ context.Context, name string) ([]int, error) {
 	entries, err := os.ReadDir("/proc")
 	if err != nil {

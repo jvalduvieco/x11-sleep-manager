@@ -17,12 +17,19 @@ import (
 )
 
 type fakeRuntimeController struct {
+	updateErr      error
 	reconcileErr   error
 	enableErr      error
 	disableErr     error
+	updateCalls    int
 	reconcileCalls int
 	enableCalls    int
 	disableCalls   int
+}
+
+func (f *fakeRuntimeController) UpdateConfig(context.Context, config.ConfigPatch) error {
+	f.updateCalls++
+	return f.updateErr
 }
 
 func (f *fakeRuntimeController) Reconcile(context.Context) error {
@@ -127,6 +134,36 @@ func TestRuntimeControlEndpointsInvokeController(t *testing.T) {
 	}
 	if runtime.reconcileCalls != 1 || runtime.enableCalls != 1 || runtime.disableCalls != 1 {
 		t.Fatalf("unexpected runtime calls: %+v", runtime)
+	}
+}
+
+func TestConfigUpdateEndpointInvokesController(t *testing.T) {
+	socketPath := filepath.Join(t.TempDir(), "x11-sm.sock")
+	store := state.NewStore(config.Default(), "test")
+	runtime := &fakeRuntimeController{}
+	server := NewServerWithRuntimeControl(socketPath, store, store, runtime)
+	if err := server.Start(); err != nil {
+		t.Fatalf("start server: %v", err)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		_ = server.Shutdown(ctx)
+	})
+
+	client := &http.Client{Transport: &http.Transport{DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+		return (&net.Dialer{}).DialContext(ctx, "unix", socketPath)
+	}}}
+	resp, err := client.Post("http://unix/v1/config", "application/json", strings.NewReader(`{"match":{"uid":"self","who":["Editor"],"what_any":["idle"]}}`))
+	if err != nil {
+		t.Fatalf("post config: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("unexpected status: %s", resp.Status)
+	}
+	if runtime.updateCalls != 1 {
+		t.Fatalf("unexpected update call count: %d", runtime.updateCalls)
 	}
 }
 

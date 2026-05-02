@@ -106,6 +106,10 @@ func (c *Controller) Applied() bool {
 	return c.applied
 }
 
+func (c *Controller) SetConfig(cfg config.X11Config) {
+	c.config = cfg
+}
+
 func ParseQuery(output string) (Snapshot, error) {
 	screenSaverMatch := screenSaverPattern.FindStringSubmatch(output)
 	if len(screenSaverMatch) != 3 {

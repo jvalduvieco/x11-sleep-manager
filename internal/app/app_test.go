@@ -193,3 +193,21 @@ func TestReconcileLoopRunsImmediatelyOnStart(t *testing.T) {
 
 	t.Fatal("expected initial reconcile to run")
 }
+
+func TestUpdateConfigChangesMatcherBehavior(t *testing.T) {
+	cfg := config.Default()
+	app := NewWithSource(cfg, "test", fakeSource{inhibitors: []observe.Inhibitor{{What: "sleep:idle", Who: "OpenCode", UID: 1000}}}, 1000)
+	app.x11 = x11state.NewController(cfg.X11, &fakeX11Runner{outputs: []string{sampleXSetOutput}})
+	app.processes = processctl.NewController(cfg.Processes, &fakeProcessInspector{})
+	app.store.RegisterSession(state.Session{Display: ":0", XAuthority: "/tmp/auth"})
+
+	if err := app.UpdateConfig(context.Background(), config.ConfigPatch{Match: &config.MatchConfig{UID: "self", Who: []string{"Editor"}, WhatAny: []string{"idle"}}}); err != nil {
+		t.Fatalf("UpdateConfig returned error: %v", err)
+	}
+	if err := app.Reconcile(context.Background()); err != nil {
+		t.Fatalf("Reconcile returned error: %v", err)
+	}
+	if got := app.Snapshot().State; got != state.ModeIdle {
+		t.Fatalf("unexpected state after config update: %s", got)
+	}
+}
