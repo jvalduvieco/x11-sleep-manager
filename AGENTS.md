@@ -101,6 +101,20 @@ Current transport:
 
 - `GET /v1/events`
 
+## Current Doctor Checks
+
+`x11smctl doctor` currently verifies:
+
+- daemon socket reachable
+- system bus reachable
+- `org.freedesktop.login1` reachable
+- `DISPLAY` set
+- `XAUTHORITY` set
+- `xset` available and callable
+- `xset q` parseable
+- configured helper processes installed or running
+- runtime directory writable
+
 ## Current Inhibitor Model
 
 `internal/observe` currently defines a normalized inhibitor with:

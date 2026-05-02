@@ -2,15 +2,18 @@ package doctor
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/godbus/dbus/v5"
+	"github.com/jvalduvieco/x11_sleep_manager/internal/config"
 	"github.com/jvalduvieco/x11_sleep_manager/internal/state"
 	"github.com/jvalduvieco/x11_sleep_manager/internal/x11state"
 )
@@ -27,35 +30,41 @@ type Report struct {
 
 type Runner struct {
 	SocketCheck     func(ctx context.Context, socketPath string) error
+	RuntimeDirCheck func(socketPath string) error
 	SystemBusCheck  func(ctx context.Context) error
 	LogindCheck     func(ctx context.Context) error
 	DisplayCheck    func() error
 	XAuthorityCheck func() error
 	XSetPathCheck   func() error
 	XSetQueryCheck  func(ctx context.Context) error
+	HelperCheck     func(ctx context.Context, socketPath string) error
 }
 
 func DefaultRunner() Runner {
 	return Runner{
 		SocketCheck:     checkSocket,
+		RuntimeDirCheck: checkRuntimeDir,
 		SystemBusCheck:  checkSystemBus,
 		LogindCheck:     checkLogind,
 		DisplayCheck:    checkDisplay,
 		XAuthorityCheck: checkXAuthority,
 		XSetPathCheck:   checkXSetPath,
 		XSetQueryCheck:  checkXSetQuery,
+		HelperCheck:     checkHelpers,
 	}
 }
 
 func Run(ctx context.Context, socketPath string, runner Runner) Report {
 	checks := []Check{
 		runCheck(ctx, "socket", func(ctx context.Context) error { return runner.SocketCheck(ctx, socketPath) }),
+		checkFromError("runtime-dir", runner.RuntimeDirCheck(socketPath)),
 		runCheck(ctx, "system-bus", runner.SystemBusCheck),
 		runCheck(ctx, "logind", runner.LogindCheck),
 		checkFromError("display", runner.DisplayCheck()),
 		checkFromError("xauthority", runner.XAuthorityCheck()),
 		checkFromError("xset-path", runner.XSetPathCheck()),
 		runCheck(ctx, "xset-query", runner.XSetQueryCheck),
+		runCheck(ctx, "helpers", func(ctx context.Context) error { return runner.HelperCheck(ctx, socketPath) }),
 	}
 	return Report{Checks: checks}
 }
@@ -97,14 +106,7 @@ func checkFromError(name string, err error) Check {
 }
 
 func checkSocket(ctx context.Context, socketPath string) error {
-	client := &http.Client{
-		Timeout: 5 * time.Second,
-		Transport: &http.Transport{
-			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-				return (&net.Dialer{}).DialContext(ctx, "unix", socketPath)
-			},
-		},
-	}
+	client := newSocketClient(socketPath)
 	resp, err := client.Get("http://unix/v1/status")
 	if err != nil {
 		return fmt.Errorf("request status: %w", err)
@@ -113,6 +115,21 @@ func checkSocket(ctx context.Context, socketPath string) error {
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("unexpected status: %s", resp.Status)
 	}
+	return nil
+}
+
+func checkRuntimeDir(socketPath string) error {
+	dir := filepath.Dir(socketPath)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("create runtime dir: %w", err)
+	}
+	file, err := os.CreateTemp(dir, "x11sm-doctor-")
+	if err != nil {
+		return fmt.Errorf("write runtime dir: %w", err)
+	}
+	name := file.Name()
+	file.Close()
+	_ = os.Remove(name)
 	return nil
 }
 
@@ -172,4 +189,61 @@ func checkXSetQuery(ctx context.Context) error {
 		return fmt.Errorf("parse xset q: %w", err)
 	}
 	return nil
+}
+
+func checkHelpers(ctx context.Context, socketPath string) error {
+	client := newSocketClient(socketPath)
+	resp, err := client.Get("http://unix/v1/config")
+	if err != nil {
+		return fmt.Errorf("request config: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("unexpected config status: %s", resp.Status)
+	}
+	var cfg config.Config
+	if err := json.NewDecoder(resp.Body).Decode(&cfg); err != nil {
+		return fmt.Errorf("decode config: %w", err)
+	}
+	for _, name := range cfg.Processes.Pause {
+		if processRunning(name) {
+			continue
+		}
+		if _, err := exec.LookPath(name); err == nil {
+			continue
+		}
+		return fmt.Errorf("helper %q is not running and not found on PATH", name)
+	}
+	return nil
+}
+
+func processRunning(name string) bool {
+	entries, err := os.ReadDir("/proc")
+	if err != nil {
+		return false
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		comm, err := os.ReadFile(filepath.Join("/proc", entry.Name(), "comm"))
+		if err != nil {
+			continue
+		}
+		if strings.TrimSpace(string(comm)) == name {
+			return true
+		}
+	}
+	return false
+}
+
+func newSocketClient(socketPath string) *http.Client {
+	return &http.Client{
+		Timeout: 5 * time.Second,
+		Transport: &http.Transport{
+			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+				return (&net.Dialer{}).DialContext(ctx, "unix", socketPath)
+			},
+		},
+	}
 }

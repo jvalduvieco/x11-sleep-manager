@@ -10,21 +10,23 @@ import (
 func TestRunCollectsChecks(t *testing.T) {
 	report := Run(context.Background(), "/tmp/test.sock", Runner{
 		SocketCheck:     func(context.Context, string) error { return nil },
+		RuntimeDirCheck: func(string) error { return nil },
 		SystemBusCheck:  func(context.Context) error { return errors.New("bus") },
 		LogindCheck:     func(context.Context) error { return nil },
 		DisplayCheck:    func() error { return nil },
 		XAuthorityCheck: func() error { return nil },
 		XSetPathCheck:   func() error { return nil },
 		XSetQueryCheck:  func(context.Context) error { return errors.New("xset") },
+		HelperCheck:     func(context.Context, string) error { return nil },
 	})
 
-	if got, want := len(report.Checks), 7; got != want {
+	if got, want := len(report.Checks), 9; got != want {
 		t.Fatalf("unexpected check count: got %d want %d", got, want)
 	}
-	if report.Checks[1].OK {
+	if report.Checks[2].OK {
 		t.Fatal("expected system-bus check to fail")
 	}
-	if report.Checks[6].OK {
+	if report.Checks[7].OK {
 		t.Fatal("expected xset-query check to fail")
 	}
 	if report.OK() {
