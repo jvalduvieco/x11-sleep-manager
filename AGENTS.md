@@ -37,6 +37,10 @@ Not implemented yet:
 
 The repository now also includes packaging and operator examples under `examples/` and a live validation guide in `docs/manual-smoke-test.md`.
 
+Current release workflow note:
+
+- `.github/workflows/release.yml` requires `permissions: contents: write` so `softprops/action-gh-release` can create releases with `GITHUB_TOKEN`
+
 ## Current Control API
 
 - `GET /v1/status`
