@@ -18,7 +18,7 @@ type App struct {
 func New(cfg config.Config, version string) *App {
 	store := state.NewStore(cfg, version)
 	return &App{
-		server: control.NewServer(cfg.Socket.Path, store),
+		server: control.NewServerWithSessionRegistration(cfg.Socket.Path, store, store),
 		store:  store,
 		config: cfg,
 	}

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"flag"
@@ -26,26 +27,21 @@ func run() error {
 	flag.Parse()
 
 	if flag.NArg() == 0 {
-		return fmt.Errorf("usage: x11smctl [--socket path] status")
+		return fmt.Errorf("usage: x11smctl [--socket path] <status|register-session>")
 	}
 
 	switch flag.Arg(0) {
 	case "status":
 		return printStatus(socketPath)
+	case "register-session":
+		return registerSession(socketPath)
 	default:
 		return fmt.Errorf("unknown command %q", flag.Arg(0))
 	}
 }
 
 func printStatus(socketPath string) error {
-	client := &http.Client{
-		Timeout: 5 * time.Second,
-		Transport: &http.Transport{
-			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-				return (&net.Dialer{}).DialContext(ctx, "unix", socketPath)
-			},
-		},
-	}
+	client := newHTTPClient(socketPath)
 
 	resp, err := client.Get("http://unix/v1/status")
 	if err != nil {
@@ -69,4 +65,66 @@ func printStatus(socketPath string) error {
 
 	fmt.Println(string(encoded))
 	return nil
+}
+
+type sessionRegistrationRequest struct {
+	Display            string `json:"display"`
+	XAuthority         string `json:"xauthority"`
+	XDGSessionType     string `json:"xdg_session_type,omitempty"`
+	DBusSessionBusAddr string `json:"dbus_session_bus_address,omitempty"`
+}
+
+func registerSession(socketPath string) error {
+	payload, err := buildSessionRegistrationRequest()
+	if err != nil {
+		return err
+	}
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("encode session registration: %w", err)
+	}
+
+	client := newHTTPClient(socketPath)
+	resp, err := client.Post("http://unix/v1/session", "application/json", bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("register session: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNoContent {
+		return fmt.Errorf("session registration failed: %s", resp.Status)
+	}
+
+	fmt.Println("session registered")
+	return nil
+}
+
+func buildSessionRegistrationRequest() (sessionRegistrationRequest, error) {
+	payload := sessionRegistrationRequest{
+		Display:            os.Getenv("DISPLAY"),
+		XAuthority:         os.Getenv("XAUTHORITY"),
+		XDGSessionType:     os.Getenv("XDG_SESSION_TYPE"),
+		DBusSessionBusAddr: os.Getenv("DBUS_SESSION_BUS_ADDRESS"),
+	}
+
+	if payload.Display == "" {
+		return sessionRegistrationRequest{}, fmt.Errorf("DISPLAY is not set")
+	}
+	if payload.XAuthority == "" {
+		return sessionRegistrationRequest{}, fmt.Errorf("XAUTHORITY is not set")
+	}
+
+	return payload, nil
+}
+
+func newHTTPClient(socketPath string) *http.Client {
+	return &http.Client{
+		Timeout: 5 * time.Second,
+		Transport: &http.Transport{
+			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+				return (&net.Dialer{}).DialContext(ctx, "unix", socketPath)
+			},
+		},
+	}
 }

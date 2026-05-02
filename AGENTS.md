@@ -22,12 +22,12 @@ The repository now contains the first bootstrap slice:
 - Unix-socket HTTP control server in `internal/control`
 - bootstrap app wiring in `internal/app`
 - daemon startup and signal handling in `cmd/x11-sleep-manager`
-- CLI `status` command in `cmd/x11smctl`
+- CLI `status` and `register-session` commands in `cmd/x11smctl`
+- in-memory X11 session registration captured from the CLI environment
 
 Not implemented yet:
 
 - inhibitor discovery or matching
-- session registration from CLI
 - X11 command execution
 - `doctor`, `enable`, `disable`, `reconcile`, or config mutation endpoints
 - helper process control such as `xss-lock` pause/resume
@@ -35,12 +35,23 @@ Not implemented yet:
 ## Current Control API
 
 - `GET /v1/status`
+- `POST /v1/session`
 
 Transport details:
 
 - HTTP over Unix domain socket
 - socket path comes from config
 - socket file mode is `0600`
+
+`POST /v1/session` currently requires at least:
+
+- `display`
+- `xauthority`
+
+Optional fields currently accepted:
+
+- `xdg_session_type`
+- `dbus_session_bus_address`
 
 ## Current Status Model
 
@@ -52,6 +63,26 @@ Transport details:
 - `degraded`
 
 The initial daemon starts in `idle`.
+
+## Current Session Registration Model
+
+The daemon stores one in-memory active session context.
+
+It currently records:
+
+- `DISPLAY`
+- `XAUTHORITY`
+- optional `XDG_SESSION_TYPE`
+- optional `DBUS_SESSION_BUS_ADDRESS`
+- session registration timestamp
+
+CLI command:
+
+- `x11smctl register-session`
+
+Expected use:
+
+- invoke `x11smctl register-session` from the live i3/X11 session so the daemon learns the correct X11 environment before later X11 actions are implemented
 
 ## Config Rules
 

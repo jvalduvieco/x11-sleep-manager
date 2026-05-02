@@ -41,12 +41,27 @@ func TestTransitionUpdatesChangedAtOnlyOnChange(t *testing.T) {
 
 func TestSettersAreReflectedInSnapshot(t *testing.T) {
 	store := NewStore(config.Default(), "dev")
-	store.SetSessionReady(true)
+	registeredAt := time.Date(2026, 5, 2, 12, 5, 0, 0, time.UTC)
+	store.clockNow = func() time.Time { return registeredAt }
+	store.RegisterSession(Session{
+		Display:        ":0",
+		XAuthority:     "/tmp/.Xauthority",
+		XDGSessionType: "x11",
+	})
 	store.SetLastError(errors.New("boom"))
 
 	snapshot := store.Snapshot()
 	if !snapshot.SessionReady {
 		t.Fatal("expected session to be ready")
+	}
+	if snapshot.Session == nil {
+		t.Fatal("expected session details to be present")
+	}
+	if snapshot.Session.Display != ":0" {
+		t.Fatalf("unexpected display: %q", snapshot.Session.Display)
+	}
+	if !snapshot.Session.RegisteredAt.Equal(registeredAt) {
+		t.Fatalf("unexpected registered time: %s", snapshot.Session.RegisteredAt)
 	}
 	if snapshot.LastError != "boom" {
 		t.Fatalf("unexpected last error: %q", snapshot.LastError)

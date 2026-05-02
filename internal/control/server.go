@@ -18,6 +18,10 @@ type StatusSource interface {
 	Snapshot() state.Snapshot
 }
 
+type SessionRegistrar interface {
+	RegisterSession(session state.Session)
+}
+
 type Server struct {
 	httpServer *http.Server
 	listener   net.Listener
@@ -31,6 +35,44 @@ func NewServer(socketPath string, source StatusSource) *Server {
 		if err := json.NewEncoder(w).Encode(source.Snapshot()); err != nil {
 			http.Error(w, fmt.Sprintf("encode response: %v", err), http.StatusInternalServerError)
 		}
+	})
+
+	return &Server{
+		httpServer: &http.Server{
+			Handler:           mux,
+			ReadHeaderTimeout: 5 * time.Second,
+		},
+		socketPath: socketPath,
+	}
+}
+
+func NewServerWithSessionRegistration(socketPath string, source StatusSource, registrar SessionRegistrar) *Server {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /v1/status", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(source.Snapshot()); err != nil {
+			http.Error(w, fmt.Sprintf("encode response: %v", err), http.StatusInternalServerError)
+		}
+	})
+	mux.HandleFunc("POST /v1/session", func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+
+		var payload state.Session
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)
+			return
+		}
+		if payload.Display == "" {
+			http.Error(w, "display must not be empty", http.StatusBadRequest)
+			return
+		}
+		if payload.XAuthority == "" {
+			http.Error(w, "xauthority must not be empty", http.StatusBadRequest)
+			return
+		}
+
+		registrar.RegisterSession(payload)
+		w.WriteHeader(http.StatusNoContent)
 	})
 
 	return &Server{

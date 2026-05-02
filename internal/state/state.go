@@ -22,8 +22,17 @@ type Snapshot struct {
 	LastTransitionAt time.Time     `json:"last_transition_at"`
 	Config           config.Config `json:"config"`
 	Version          string        `json:"version"`
+	Session          *Session      `json:"session,omitempty"`
 	SessionReady     bool          `json:"session_ready"`
 	LastError        string        `json:"last_error,omitempty"`
+}
+
+type Session struct {
+	Display            string    `json:"display"`
+	XAuthority         string    `json:"xauthority"`
+	XDGSessionType     string    `json:"xdg_session_type,omitempty"`
+	DBusSessionBusAddr string    `json:"dbus_session_bus_address,omitempty"`
+	RegisteredAt       time.Time `json:"registered_at"`
 }
 
 type Store struct {
@@ -34,7 +43,7 @@ type Store struct {
 	config   config.Config
 	version  string
 	lastErr  string
-	session  bool
+	session  *Session
 	clockNow func() time.Time
 }
 
@@ -60,7 +69,8 @@ func (s *Store) Snapshot() Snapshot {
 		LastTransitionAt: s.changed,
 		Config:           s.config,
 		Version:          s.version,
-		SessionReady:     s.session,
+		Session:          cloneSession(s.session),
+		SessionReady:     s.session != nil,
 		LastError:        s.lastErr,
 	}
 }
@@ -89,8 +99,18 @@ func (s *Store) SetLastError(err error) {
 	s.lastErr = err.Error()
 }
 
-func (s *Store) SetSessionReady(ready bool) {
+func (s *Store) RegisterSession(session Session) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.session = ready
+	session.RegisteredAt = s.clockNow()
+	s.session = &session
+}
+
+func cloneSession(session *Session) *Session {
+	if session == nil {
+		return nil
+	}
+
+	copy := *session
+	return &copy
 }
