@@ -27,7 +27,7 @@ func run() error {
 	flag.Parse()
 
 	if flag.NArg() == 0 {
-		return fmt.Errorf("usage: x11smctl [--socket path] <status|register-session>")
+		return fmt.Errorf("usage: x11smctl [--socket path] <status|register-session|reconcile|enable|disable>")
 	}
 
 	switch flag.Arg(0) {
@@ -35,6 +35,12 @@ func run() error {
 		return printStatus(socketPath)
 	case "register-session":
 		return registerSession(socketPath)
+	case "reconcile":
+		return postNoContentCommand(socketPath, "/v1/reconcile", "reconciled")
+	case "enable":
+		return postNoContentCommand(socketPath, "/v1/enable", "enabled")
+	case "disable":
+		return postNoContentCommand(socketPath, "/v1/disable", "disabled")
 	default:
 		return fmt.Errorf("unknown command %q", flag.Arg(0))
 	}
@@ -97,6 +103,20 @@ func registerSession(socketPath string) error {
 	}
 
 	fmt.Println("session registered")
+	return nil
+}
+
+func postNoContentCommand(socketPath, path, success string) error {
+	client := newHTTPClient(socketPath)
+	resp, err := client.Post("http://unix"+path, "application/json", nil)
+	if err != nil {
+		return fmt.Errorf("post %s: %w", path, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		return fmt.Errorf("request %s failed: %s", path, resp.Status)
+	}
+	fmt.Println(success)
 	return nil
 }
 

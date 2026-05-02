@@ -3,6 +3,7 @@ package control
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -14,6 +15,30 @@ import (
 	"github.com/jvalduvieco/x11_sleep_manager/internal/config"
 	"github.com/jvalduvieco/x11_sleep_manager/internal/state"
 )
+
+type fakeRuntimeController struct {
+	reconcileErr   error
+	enableErr      error
+	disableErr     error
+	reconcileCalls int
+	enableCalls    int
+	disableCalls   int
+}
+
+func (f *fakeRuntimeController) Reconcile(context.Context) error {
+	f.reconcileCalls++
+	return f.reconcileErr
+}
+
+func (f *fakeRuntimeController) Enable(context.Context) error {
+	f.enableCalls++
+	return f.enableErr
+}
+
+func (f *fakeRuntimeController) Disable(context.Context) error {
+	f.disableCalls++
+	return f.disableErr
+}
 
 func TestStatusEndpointServesSnapshot(t *testing.T) {
 	socketPath := filepath.Join(t.TempDir(), "x11-sm.sock")
@@ -69,6 +94,66 @@ func TestStatusEndpointServesSnapshot(t *testing.T) {
 	}
 	if snapshot.Version != "test" {
 		t.Fatalf("unexpected version: %s", snapshot.Version)
+	}
+}
+
+func TestRuntimeControlEndpointsInvokeController(t *testing.T) {
+	socketPath := filepath.Join(t.TempDir(), "x11-sm.sock")
+	store := state.NewStore(config.Default(), "test")
+	runtime := &fakeRuntimeController{}
+	server := NewServerWithRuntimeControl(socketPath, store, store, runtime)
+	if err := server.Start(); err != nil {
+		t.Fatalf("start server: %v", err)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		_ = server.Shutdown(ctx)
+	})
+
+	client := &http.Client{Transport: &http.Transport{DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+		return (&net.Dialer{}).DialContext(ctx, "unix", socketPath)
+	}}}
+
+	for _, path := range []string{"/v1/reconcile", "/v1/enable", "/v1/disable"} {
+		resp, err := client.Post("http://unix"+path, "application/json", nil)
+		if err != nil {
+			t.Fatalf("post %s: %v", path, err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusNoContent {
+			t.Fatalf("unexpected status for %s: %s", path, resp.Status)
+		}
+	}
+	if runtime.reconcileCalls != 1 || runtime.enableCalls != 1 || runtime.disableCalls != 1 {
+		t.Fatalf("unexpected runtime calls: %+v", runtime)
+	}
+}
+
+func TestRuntimeControlEndpointPropagatesError(t *testing.T) {
+	socketPath := filepath.Join(t.TempDir(), "x11-sm.sock")
+	store := state.NewStore(config.Default(), "test")
+	runtime := &fakeRuntimeController{reconcileErr: errors.New("boom")}
+	server := NewServerWithRuntimeControl(socketPath, store, store, runtime)
+	if err := server.Start(); err != nil {
+		t.Fatalf("start server: %v", err)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		_ = server.Shutdown(ctx)
+	})
+
+	client := &http.Client{Transport: &http.Transport{DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+		return (&net.Dialer{}).DialContext(ctx, "unix", socketPath)
+	}}}
+	resp, err := client.Post("http://unix/v1/reconcile", "application/json", nil)
+	if err != nil {
+		t.Fatalf("post reconcile: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("unexpected status: %s", resp.Status)
 	}
 }
 

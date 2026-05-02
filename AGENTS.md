@@ -33,12 +33,15 @@ The repository now contains the first bootstrap slice:
 
 Not implemented yet:
 
-- `doctor`, `enable`, `disable`, `reconcile`, or config mutation endpoints
+- `doctor` or config mutation endpoints
 
 ## Current Control API
 
 - `GET /v1/status`
 - `POST /v1/session`
+- `POST /v1/reconcile`
+- `POST /v1/enable`
+- `POST /v1/disable`
 
 Transport details:
 
@@ -121,6 +124,9 @@ It currently records:
 CLI command:
 
 - `x11smctl register-session`
+- `x11smctl reconcile`
+- `x11smctl enable`
+- `x11smctl disable`
 
 Expected use:
 

@@ -22,6 +22,12 @@ type SessionRegistrar interface {
 	RegisterSession(session state.Session)
 }
 
+type RuntimeController interface {
+	Reconcile(ctx context.Context) error
+	Enable(ctx context.Context) error
+	Disable(ctx context.Context) error
+}
+
 type Server struct {
 	httpServer *http.Server
 	listener   net.Listener
@@ -47,6 +53,10 @@ func NewServer(socketPath string, source StatusSource) *Server {
 }
 
 func NewServerWithSessionRegistration(socketPath string, source StatusSource, registrar SessionRegistrar) *Server {
+	return NewServerWithRuntimeControl(socketPath, source, registrar, nil)
+}
+
+func NewServerWithRuntimeControl(socketPath string, source StatusSource, registrar SessionRegistrar, runtime RuntimeController) *Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /v1/status", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -74,6 +84,29 @@ func NewServerWithSessionRegistration(socketPath string, source StatusSource, re
 		registrar.RegisterSession(payload)
 		w.WriteHeader(http.StatusNoContent)
 	})
+	if runtime != nil {
+		mux.HandleFunc("POST /v1/reconcile", func(w http.ResponseWriter, r *http.Request) {
+			if err := runtime.Reconcile(r.Context()); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
+		})
+		mux.HandleFunc("POST /v1/enable", func(w http.ResponseWriter, r *http.Request) {
+			if err := runtime.Enable(r.Context()); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
+		})
+		mux.HandleFunc("POST /v1/disable", func(w http.ResponseWriter, r *http.Request) {
+			if err := runtime.Disable(r.Context()); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
+		})
+	}
 
 	return &Server{
 		httpServer: &http.Server{

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/jvalduvieco/x11_sleep_manager/internal/config"
@@ -17,6 +18,7 @@ import (
 )
 
 type App struct {
+	mu            sync.Mutex
 	server        *control.Server
 	store         *state.Store
 	config        config.Config
@@ -25,6 +27,7 @@ type App struct {
 	stopReconcile context.CancelFunc
 	x11           *x11state.Controller
 	processes     *processctl.Controller
+	enabled       bool
 }
 
 func New(cfg config.Config, version string) *App {
@@ -37,15 +40,17 @@ func New(cfg config.Config, version string) *App {
 
 func NewWithSource(cfg config.Config, version string, source observe.Source, selfUID int) *App {
 	store := state.NewStore(cfg, version)
-	return &App{
-		server:    control.NewServerWithSessionRegistration(cfg.Socket.Path, store, store),
+	app := &App{
 		store:     store,
 		config:    cfg,
 		source:    source,
 		selfUID:   selfUID,
 		x11:       x11state.NewController(cfg.X11, x11state.CommandRunner{}),
 		processes: processctl.NewController(cfg.Processes, processctl.ProcInspector{}),
+		enabled:   true,
 	}
+	app.server = control.NewServerWithRuntimeControl(cfg.Socket.Path, store, store, app)
+	return app
 }
 
 func (a *App) Start() error {
@@ -62,6 +67,8 @@ func (a *App) Start() error {
 }
 
 func (a *App) Shutdown(ctx context.Context) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
 	if a.stopReconcile != nil {
 		a.stopReconcile()
 	}
@@ -83,6 +90,9 @@ func (a *App) Snapshot() state.Snapshot {
 }
 
 func (a *App) Reconcile(ctx context.Context) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
 	inhibitors, err := a.source.List(ctx)
 	if err != nil {
 		a.store.RecordReconcileFailure(err)
@@ -92,6 +102,10 @@ func (a *App) Reconcile(ctx context.Context) error {
 
 	matched := matcher.Filter(inhibitors, a.config.Match, a.selfUID)
 	a.store.RecordReconcileSuccess(matched)
+	if !a.enabled {
+		a.store.Transition(state.ModeDisabled)
+		return nil
+	}
 	if len(matched) > 0 {
 		snapshot := a.store.Snapshot()
 		if snapshot.Session == nil {
@@ -143,6 +157,27 @@ func (a *App) Reconcile(ctx context.Context) error {
 	return nil
 }
 
+func (a *App) Enable(ctx context.Context) error {
+	a.mu.Lock()
+	a.enabled = true
+	a.mu.Unlock()
+	return a.Reconcile(ctx)
+}
+
+func (a *App) Disable(ctx context.Context) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	a.enabled = false
+	if err := a.clearActiveSideEffects(ctx); err != nil {
+		a.store.SetLastError(err)
+		a.store.Transition(state.ModeDegraded)
+		return err
+	}
+	a.store.Transition(state.ModeDisabled)
+	return nil
+}
+
 func (a *App) runReconcileLoop(ctx context.Context) {
 	_ = a.Reconcile(ctx)
 
@@ -157,4 +192,26 @@ func (a *App) runReconcileLoop(ctx context.Context) {
 			_ = a.Reconcile(ctx)
 		}
 	}
+}
+
+func (a *App) clearActiveSideEffects(ctx context.Context) error {
+	var clearErr error
+	if a.processes.HasPaused() {
+		if err := a.processes.Resume(ctx); err != nil {
+			clearErr = errors.Join(clearErr, fmt.Errorf("resume helper processes: %w", err))
+		} else {
+			a.store.SetPausedHelpers(nil)
+		}
+	}
+	snapshot := a.store.Snapshot()
+	if a.x11.Applied() {
+		if snapshot.Session == nil {
+			clearErr = errors.Join(clearErr, errors.New("cannot restore x11 state without registered session"))
+		} else if err := a.x11.Restore(ctx, *snapshot.Session); err != nil {
+			clearErr = errors.Join(clearErr, fmt.Errorf("restore x11 overrides: %w", err))
+		} else {
+			a.store.SetX11OverridesActive(false)
+		}
+	}
+	return clearErr
 }
